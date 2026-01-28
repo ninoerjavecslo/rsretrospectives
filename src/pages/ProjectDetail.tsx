@@ -836,7 +836,6 @@ export function ProjectDetail() {
                 <Input label="CMS" value={formData.cms || ''} onChange={(v) => setFormData({ ...formData, cms: v })} />
                 <Input label="Integrations" value={formData.integrations || ''} onChange={(v) => setFormData({ ...formData, integrations: v })} />
                 <Input label="Base Offer (€)" type="number" value={formData.offer_value || 0} onChange={(v) => setFormData({ ...formData, offer_value: Number(v) })} />
-                <Input label="Est. Margin (%)" type="number" value={formData.estimated_profit_margin || 0} onChange={(v) => setFormData({ ...formData, estimated_profit_margin: Number(v) })} />
                 <Select label="Status" value={formData.status || 'draft'} onChange={(v) => setFormData({ ...formData, status: v as 'draft' | 'active' | 'completed' })} options={STATUS_OPTIONS} />
                 <Select label="Project Outcome" value={formData.project_outcome || ''} onChange={(v) => setFormData({ ...formData, project_outcome: (v || null) as ProjectOutcome | null })} options={OUTCOME_OPTIONS} />
               </div>
@@ -854,6 +853,12 @@ export function ProjectDetail() {
                     <span className="text-sm font-medium text-slate-900">{item.value || '-'}</span>
                   </div>
                 ))}
+                {project.project_outcome && (
+                  <div className="flex justify-between py-2 pt-3 mt-1 border-t border-slate-200">
+                    <span className="text-sm text-slate-500">Outcome</span>
+                    <OutcomeBadge outcome={project.project_outcome} />
+                  </div>
+                )}
               </div>
             )}
           </Card>
