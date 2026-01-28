@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Calculator, Upload, FileText, AlertTriangle, TrendingUp, ThumbsUp, ThumbsDown, Copy, Check, Sparkles, HelpCircle, Layout, ChevronDown, ChevronRight, Download, History, Trash2 } from 'lucide-react';
+import { Calculator, Upload, FileText, AlertTriangle, TrendingUp, ThumbsUp, ThumbsDown, Copy, Check, Sparkles, HelpCircle, Layout, ChevronDown, ChevronRight, Download, History, Trash2, Save } from 'lucide-react';
 import mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 import { jsPDF } from 'jspdf';
@@ -8,7 +8,7 @@ import autoTable from 'jspdf-autotable';
 // Set up PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 import { Button, Card, Input, Textarea, Select, LoadingSpinner } from '../components/ui';
-import { fetchProjectsWithMetrics, fetchAnalyticsData, supabase, TARGET_MARGIN_MIN, INTERNAL_HOURLY_COST } from '../lib/supabase';
+import { fetchProjectsWithMetrics, fetchAnalyticsData, supabase, INTERNAL_HOURLY_COST } from '../lib/supabase';
 import type { Profile } from '../types';
 
 const PROJECT_TYPES = [
@@ -36,6 +36,13 @@ const CMS_OPTIONS = [
 ];
 
 const PROFILES: Profile[] = ['UX', 'UI', 'DESIGN', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
+
+// Client hourly rates
+const HOURLY_RATES = {
+  low: 60,
+  medium: 70,
+  high: 80,
+};
 
 interface Template {
   name: string;
@@ -272,20 +279,20 @@ export function Estimator() {
     });
     yPos = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-    // Pricing
+    // Pricing by Hourly Rate
     if (yPos > 240) { doc.addPage(); yPos = 20; }
     doc.setFontSize(12);
     doc.setFont('helvetica', 'bold');
-    doc.text('Suggested Pricing (52% margin)', 14, yPos);
+    doc.text(`Suggested Pricing (based on ${estimate.total.realistic}h)`, 14, yPos);
     yPos += 7;
 
     autoTable(doc, {
       startY: yPos,
-      head: [['Scenario', 'Price']],
+      head: [['Hourly Rate', 'Total Price']],
       body: [
-        ['Optimistic', `€${estimate.suggested_price?.optimistic?.toLocaleString() || 0}`],
-        ['Realistic', `€${estimate.suggested_price?.realistic?.toLocaleString() || 0}`],
-        ['Pessimistic', `€${estimate.suggested_price?.pessimistic?.toLocaleString() || 0}`],
+        [`€${HOURLY_RATES.low}/hour`, `€${(estimate.total.realistic * HOURLY_RATES.low).toLocaleString()}`],
+        [`€${HOURLY_RATES.medium}/hour`, `€${(estimate.total.realistic * HOURLY_RATES.medium).toLocaleString()}`],
+        [`€${HOURLY_RATES.high}/hour`, `€${(estimate.total.realistic * HOURLY_RATES.high).toLocaleString()}`],
       ],
       theme: 'striped',
       headStyles: { fillColor: [99, 102, 241] },
@@ -377,32 +384,52 @@ export function Estimator() {
       if (data.estimate) {
         setEstimate(data.estimate);
         setTemplates(data.estimate.suggested_templates || []);
-
-        // Save estimate to database
-        const { data: savedEstimate } = await supabase
-          .from('ai_estimates')
-          .insert([{
-            brief_text: briefText,
-            project_type: projectType,
-            cms,
-            integrations,
-            estimate_result: data.estimate,
-            suggested_price: data.estimate.suggested_price?.realistic,
-            confidence: data.estimate.confidence,
-            risks: data.estimate.risks?.map((r: Risk) => r.risk) || [],
-          }])
-          .select()
-          .single();
-
-        if (savedEstimate) {
-          setSavedEstimateId(savedEstimate.id);
-        }
+        setSavedEstimateId(null); // Reset - not saved yet
       }
     } catch (error) {
       console.error('Estimate error:', error);
       alert('Failed to generate estimate. Please try again.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function saveEstimate() {
+    if (!estimate) return;
+
+    try {
+      // Calculate price based on realistic hours and medium rate
+      const realisticPrice = estimate.total.realistic * HOURLY_RATES.medium;
+
+      const { data: savedEstimate, error } = await supabase
+        .from('ai_estimates')
+        .insert([{
+          brief_text: briefText,
+          project_type: projectType,
+          cms,
+          integrations,
+          estimate_result: estimate,
+          suggested_price: realisticPrice,
+          confidence: estimate.confidence,
+          risks: estimate.risks?.map((r: Risk) => r.risk) || [],
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error saving estimate:', error);
+        alert('Failed to save estimate. Please try again.');
+        return;
+      }
+
+      if (savedEstimate) {
+        setSavedEstimateId(savedEstimate.id);
+        loadEstimateHistory(); // Refresh history
+        alert('Estimate saved successfully!');
+      }
+    } catch (error) {
+      console.error('Error saving estimate:', error);
+      alert('Failed to save estimate. Please try again.');
     }
   }
 
@@ -670,8 +697,8 @@ export function Estimator() {
                   <span className="font-medium">{historicalData ? JSON.parse(historicalData).length : 0}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Target Margin</span>
-                  <span className="font-medium">{TARGET_MARGIN_MIN}-55%</span>
+                  <span className="text-slate-500">Client Rates</span>
+                  <span className="font-medium">€{HOURLY_RATES.low}-€{HOURLY_RATES.high}/h</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Internal Cost</span>
@@ -692,6 +719,15 @@ export function Estimator() {
               ← Back to Input
             </Button>
             <div className="flex items-center gap-3">
+              {!savedEstimateId ? (
+                <Button onClick={saveEstimate}>
+                  <Save className="w-4 h-4" /> Save Estimate
+                </Button>
+              ) : (
+                <span className="text-sm text-emerald-600 font-medium flex items-center gap-1">
+                  <Check className="w-4 h-4" /> Saved
+                </span>
+              )}
               <Button variant="secondary" onClick={exportToPDF}>
                 <Download className="w-4 h-4" /> Export PDF
               </Button>
@@ -885,29 +921,29 @@ export function Estimator() {
                   </table>
                 </div>
 
-                {/* Pricing */}
+                {/* Pricing by Hourly Rate */}
                 <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl">
                   <div className="flex items-center gap-2 mb-4">
                     <TrendingUp className="w-5 h-5 text-blue-600" />
-                    <h4 className="font-semibold text-slate-900">Suggested Price (52% margin)</h4>
+                    <h4 className="font-semibold text-slate-900">Suggested Price (based on realistic hours: {estimate.total.realistic}h)</h4>
                   </div>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-4 bg-white rounded-xl">
-                      <div className="text-xs text-emerald-600 font-semibold mb-1">OPTIMISTIC</div>
+                      <div className="text-xs text-slate-500 font-semibold mb-1">€{HOURLY_RATES.low}/HOUR</div>
                       <div className="text-2xl font-bold text-slate-900">
-                        €{estimate.suggested_price?.optimistic?.toLocaleString()}
+                        €{(estimate.total.realistic * HOURLY_RATES.low).toLocaleString()}
                       </div>
                     </div>
                     <div className="text-center p-4 bg-white rounded-xl ring-2 ring-blue-500">
-                      <div className="text-xs text-blue-600 font-semibold mb-1">REALISTIC</div>
+                      <div className="text-xs text-blue-600 font-semibold mb-1">€{HOURLY_RATES.medium}/HOUR</div>
                       <div className="text-2xl font-bold text-blue-600">
-                        €{estimate.suggested_price?.realistic?.toLocaleString()}
+                        €{(estimate.total.realistic * HOURLY_RATES.medium).toLocaleString()}
                       </div>
                     </div>
                     <div className="text-center p-4 bg-white rounded-xl">
-                      <div className="text-xs text-amber-600 font-semibold mb-1">PESSIMISTIC</div>
+                      <div className="text-xs text-slate-500 font-semibold mb-1">€{HOURLY_RATES.high}/HOUR</div>
                       <div className="text-2xl font-bold text-slate-900">
-                        €{estimate.suggested_price?.pessimistic?.toLocaleString()}
+                        €{(estimate.total.realistic * HOURLY_RATES.high).toLocaleString()}
                       </div>
                     </div>
                   </div>
