@@ -57,11 +57,11 @@ export interface ChangeRequest {
   created_at: string;
 }
 
-export type Profile = 'UX' | 'UI' | 'DEV' | 'PM' | 'CONTENT' | 'ANALYTICS';
+export type Profile = 'UX' | 'UI' | 'DESIGN' | 'DEV' | 'PM' | 'CONTENT' | 'ANALYTICS';
 
 export type ScopeItemType = 'Wireframe' | 'Component' | 'Page' | 'Template' | 'Integration' | 'Content' | 'Custom';
 
-export const PROFILES: Profile[] = ['UX', 'UI', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
+export const PROFILES: Profile[] = ['UX', 'UI', 'DESIGN', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
 
 export const SCOPE_ITEM_TYPES: ScopeItemType[] = ['Wireframe', 'Component', 'Page', 'Template', 'Integration', 'Content', 'Custom'];
 

@@ -18,7 +18,7 @@ import type {
   Profile, ScopeItemType, ProjectOutcome, CostType
 } from '../types';
 
-const PROFILE_LIST: Profile[] = ['UX', 'UI', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
+const PROFILE_LIST: Profile[] = ['UX', 'UI', 'DESIGN', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
 const SCOPE_TYPE_LIST: ScopeItemType[] = ['Wireframe', 'Component', 'Page', 'Template', 'Integration', 'Content', 'Custom'];
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
