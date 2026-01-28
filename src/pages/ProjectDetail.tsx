@@ -12,6 +12,7 @@ import {
   createChangeRequest, updateChangeRequest, deleteChangeRequest,
   calculateMetrics, supabase
 } from '../lib/supabase';
+import { exportProjectPDF } from '../lib/export';
 import type {
   ProjectWithDetails, ProfileHours, ScopeItem, ExternalCost, ChangeRequest,
   Profile, ScopeItemType, ProjectOutcome, CostType
@@ -342,7 +343,7 @@ export function ProjectDetail() {
         <div className="flex gap-3">
           {!editMode ? (
             <>
-              <Button variant="secondary"><FileDown className="w-4 h-4" /> Export</Button>
+              <Button variant="secondary" onClick={() => exportProjectPDF(displayProject, metrics)}><FileDown className="w-4 h-4" /> Export PDF</Button>
               <Button onClick={() => setEditMode(true)}>Edit Project</Button>
             </>
           ) : (
@@ -627,6 +628,162 @@ export function ProjectDetail() {
             )}
           </Card>
 
+          {/* Contractors */}
+          <Card padding={false}>
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-base font-semibold text-slate-900">Contractors</h2>
+              {editMode && (
+                <Button variant="ghost" size="sm" onClick={() => addExternalCost('contractor')}>
+                  <Plus className="w-4 h-4" /> Add
+                </Button>
+              )}
+            </div>
+
+            {externalCosts.filter(c => c.cost_type === 'contractor').length === 0 ? (
+              <div className="p-6 text-center text-slate-400">
+                No contractors yet.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Description</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Planned</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Actual</th>
+                    {editMode && <th className="px-4 py-3 w-10"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {externalCosts.filter(c => c.cost_type === 'contractor').map((cost) => (
+                    <tr key={cost.id} className="border-b border-slate-100">
+                      <td className="px-6 py-3">
+                        {editMode ? (
+                          <input type="text" value={cost.description} placeholder="Description..."
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, description: e.target.value } : c))}
+                            className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-700">{cost.description}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editMode ? (
+                          <input type="number" value={cost.estimated_cost}
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, estimated_cost: Number(e.target.value) } : c))}
+                            className="w-28 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-500">€{cost.estimated_cost.toLocaleString()}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editMode ? (
+                          <input type="number" value={cost.actual_cost}
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, actual_cost: Number(e.target.value) } : c))}
+                            className="w-28 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                          />
+                        ) : (
+                          <span className={`text-sm font-medium ${cost.actual_cost > cost.estimated_cost ? 'text-red-500' : 'text-emerald-500'}`}>
+                            €{cost.actual_cost.toLocaleString()}
+                          </span>
+                        )}
+                      </td>
+                      {editMode && (
+                        <td className="px-4 py-3">
+                          <button onClick={() => removeExternalCost(cost.id)} className="text-slate-400 hover:text-red-500">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200">
+                    <td className="px-6 py-3 font-bold text-slate-900">Total</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-500">
+                      €{externalCosts.filter(c => c.cost_type === 'contractor').reduce((sum, c) => sum + c.estimated_cost, 0).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-500">
+                      €{externalCosts.filter(c => c.cost_type === 'contractor').reduce((sum, c) => sum + c.actual_cost, 0).toLocaleString()}
+                    </td>
+                    {editMode && <td className="px-4 py-3"></td>}
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </Card>
+
+          {/* Tools & Licenses */}
+          <Card padding={false}>
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-base font-semibold text-slate-900">Tools & Licenses</h2>
+              {editMode && (
+                <Button variant="ghost" size="sm" onClick={() => addExternalCost('tool_license')}>
+                  <Plus className="w-4 h-4" /> Add
+                </Button>
+              )}
+            </div>
+
+            {externalCosts.filter(c => c.cost_type === 'tool_license').length === 0 ? (
+              <div className="p-6 text-center text-slate-400">
+                No tools or licenses yet.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Description</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Cost</th>
+                    {editMode && <th className="px-4 py-3 w-10"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {externalCosts.filter(c => c.cost_type === 'tool_license').map((cost) => (
+                    <tr key={cost.id} className="border-b border-slate-100">
+                      <td className="px-6 py-3">
+                        {editMode ? (
+                          <input type="text" value={cost.description} placeholder="Description..."
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, description: e.target.value } : c))}
+                            className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-700">{cost.description}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editMode ? (
+                          <input type="number" value={cost.actual_cost}
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, actual_cost: Number(e.target.value), estimated_cost: Number(e.target.value) } : c))}
+                            className="w-28 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                          />
+                        ) : (
+                          <span className="text-sm font-medium text-slate-700">€{cost.actual_cost.toLocaleString()}</span>
+                        )}
+                      </td>
+                      {editMode && (
+                        <td className="px-4 py-3">
+                          <button onClick={() => removeExternalCost(cost.id)} className="text-slate-400 hover:text-red-500">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200">
+                    <td className="px-6 py-3 font-bold text-slate-900">Total</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-700">
+                      €{externalCosts.filter(c => c.cost_type === 'tool_license').reduce((sum, c) => sum + c.actual_cost, 0).toLocaleString()}
+                    </td>
+                    {editMode && <td className="px-4 py-3"></td>}
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </Card>
+
           {/* Retrospective */}
           <Card>
             <CardHeader title="Retrospective" />
@@ -701,129 +858,6 @@ export function ProjectDetail() {
               </div>
             )}
           </Card>
-
-
-          {/* Contractors */}
-          <Card>
-            <CardHeader title="Contractors" action={editMode && <Button variant="ghost" size="sm" onClick={() => addExternalCost('contractor')}><Plus className="w-3 h-3" /> Add</Button>} />
-            {externalCosts.filter(c => c.cost_type === 'contractor').length === 0 ? (
-              <p className="text-sm text-slate-400">No contractors</p>
-            ) : (
-              <div className="space-y-3">
-                {externalCosts.filter(c => c.cost_type === 'contractor').map((cost) => (
-                  <div key={cost.id} className="py-2 border-b border-slate-100 last:border-0">
-                    <div className="flex justify-between items-center mb-1">
-                      {editMode ? (
-                        <input type="text" value={cost.description}
-                          onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, description: e.target.value } : c))}
-                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm mr-2"
-                        />
-                      ) : (
-                        <span className="text-sm text-slate-700">{cost.description}</span>
-                      )}
-                      {editMode && (
-                        <button onClick={() => removeExternalCost(cost.id)} className="text-slate-400 hover:text-red-500">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {editMode ? (
-                        <>
-                          <input type="number" value={cost.estimated_cost}
-                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, estimated_cost: Number(e.target.value) } : c))}
-                            className="w-20 px-2 py-1 border border-slate-200 rounded text-sm text-right"
-                          />
-                          <span className="text-slate-300">→</span>
-                          <input type="number" value={cost.actual_cost}
-                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, actual_cost: Number(e.target.value) } : c))}
-                            className="w-20 px-2 py-1 border border-slate-200 rounded text-sm text-right"
-                          />
-                        </>
-                      ) : (
-                        <span className="text-sm">
-                          <span className="text-slate-500">€{cost.estimated_cost.toLocaleString()}</span>
-                          <span className="text-slate-300 mx-1">→</span>
-                          <span className={cost.actual_cost > cost.estimated_cost ? 'text-red-500 font-medium' : 'text-emerald-500 font-medium'}>
-                            €{cost.actual_cost.toLocaleString()}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          {/* Tools & Licenses */}
-          <Card>
-            <CardHeader title="Tools & Licenses" action={editMode && <Button variant="ghost" size="sm" onClick={() => addExternalCost('tool_license')}><Plus className="w-3 h-3" /> Add</Button>} />
-            {externalCosts.filter(c => c.cost_type === 'tool_license').length === 0 ? (
-              <p className="text-sm text-slate-400">No tools or licenses</p>
-            ) : (
-              <div className="space-y-3">
-                {externalCosts.filter(c => c.cost_type === 'tool_license').map((cost) => (
-                  <div key={cost.id} className="py-2 border-b border-slate-100 last:border-0">
-                    <div className="flex justify-between items-center mb-1">
-                      {editMode ? (
-                        <input type="text" value={cost.description}
-                          onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, description: e.target.value } : c))}
-                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm mr-2"
-                        />
-                      ) : (
-                        <span className="text-sm text-slate-700">{cost.description}</span>
-                      )}
-                      {editMode && (
-                        <button onClick={() => removeExternalCost(cost.id)} className="text-slate-400 hover:text-red-500">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {editMode ? (
-                        <>
-                          <input type="number" value={cost.estimated_cost}
-                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, estimated_cost: Number(e.target.value) } : c))}
-                            className="w-20 px-2 py-1 border border-slate-200 rounded text-sm text-right"
-                          />
-                          <span className="text-slate-300">→</span>
-                          <input type="number" value={cost.actual_cost}
-                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, actual_cost: Number(e.target.value) } : c))}
-                            className="w-20 px-2 py-1 border border-slate-200 rounded text-sm text-right"
-                          />
-                        </>
-                      ) : (
-                        <span className="text-sm">
-                          <span className="text-slate-500">€{cost.estimated_cost.toLocaleString()}</span>
-                          <span className="text-slate-300 mx-1">→</span>
-                          <span className={cost.actual_cost > cost.estimated_cost ? 'text-red-500 font-medium' : 'text-emerald-500 font-medium'}>
-                            €{cost.actual_cost.toLocaleString()}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </Card>
-
-          {/* External Costs Total */}
-          {externalCosts.length > 0 && (
-            <Card>
-              <div className="flex justify-between">
-                <span className="text-sm font-semibold">Total External Costs</span>
-                <span className="text-sm font-semibold">
-                  <span className="text-slate-500">€{metrics.estimatedExternalCost.toLocaleString()}</span>
-                  <span className="text-slate-300 mx-1">→</span>
-                  <span className={metrics.actualExternalCost > metrics.estimatedExternalCost ? 'text-red-500' : 'text-emerald-500'}>
-                    €{metrics.actualExternalCost.toLocaleString()}
-                  </span>
-                </span>
-              </div>
-            </Card>
-          )}
 
           {/* Danger Zone */}
           {editMode && (

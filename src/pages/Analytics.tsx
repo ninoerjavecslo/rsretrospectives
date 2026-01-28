@@ -5,6 +5,7 @@ import {
   Button, StatCard, Card, LoadingSpinner, Variance
 } from '../components/ui';
 import { fetchAnalyticsData } from '../lib/supabase';
+import { exportAnalyticsExcel } from '../lib/export';
 import type { ProjectWithDetails, ProjectMetrics } from '../types';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -90,9 +91,9 @@ export function Analytics() {
           <h1 className="text-2xl font-bold text-slate-900">Analytics</h1>
           <p className="text-sm text-slate-500 mt-1">Insights across all projects</p>
         </div>
-        <Button variant="secondary">
+        <Button variant="secondary" onClick={() => exportAnalyticsExcel(data.projects, data.profileStats)}>
           <FileDown className="w-4 h-4" />
-          Export Report
+          Export Excel
         </Button>
       </div>
 

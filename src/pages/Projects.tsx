@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus } from 'lucide-react';
+import { Plus, FileDown } from 'lucide-react';
 import { Button, HealthBadge, StatusBadge, LoadingSpinner, Card, MarginDisplay, Variance } from '../components/ui';
 import { fetchProjectsWithMetrics, createProject } from '../lib/supabase';
+import { exportProjectsExcel } from '../lib/export';
 import type { ProjectWithDetails, ProjectMetrics } from '../types';
 
 type ProjectWithMetrics = ProjectWithDetails & { metrics: ProjectMetrics };
@@ -58,10 +59,16 @@ export function Projects() {
           <h1 className="text-2xl font-bold text-slate-900">Projects</h1>
           <p className="text-sm text-slate-500 mt-1">Manage and track all your projects</p>
         </div>
-        <Button onClick={handleCreateProject}>
-          <Plus className="w-4 h-4" />
-          Add Project
-        </Button>
+        <div className="flex gap-3">
+          <Button variant="secondary" onClick={() => exportProjectsExcel(projects)}>
+            <FileDown className="w-4 h-4" />
+            Export Excel
+          </Button>
+          <Button onClick={handleCreateProject}>
+            <Plus className="w-4 h-4" />
+            Add Project
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
