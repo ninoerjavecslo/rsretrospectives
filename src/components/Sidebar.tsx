@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FolderKanban, BarChart3, Users, MessageSquare, Calculator, Lock, Unlock } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, BarChart3, Users, MessageSquare, Calculator, ListTodo, Lock, Unlock } from 'lucide-react';
 import { useEdit } from '../context/EditContext';
 
 const navItems = [
@@ -10,6 +10,7 @@ const navItems = [
   { to: '/team', icon: Users, label: 'Team Performance' },
   { to: '/ai-assistant', icon: MessageSquare, label: 'AI Assistant' },
   { to: '/estimator', icon: Calculator, label: 'Estimator' },
+  { to: '/pm-helper', icon: ListTodo, label: 'PM Helper' },
 ];
 
 export function Sidebar() {

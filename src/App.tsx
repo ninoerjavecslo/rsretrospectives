@@ -6,6 +6,7 @@ import { ProjectDetail } from './pages/ProjectDetail';
 import { Analytics, TeamPerformance } from './pages/Analytics';
 import { AIAssistant } from './pages/AIAssistant';
 import { Estimator } from './pages/Estimator';
+import { PMHelper } from './pages/PMHelper';
 import { EditProvider } from './context/EditContext';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="team" element={<TeamPerformance />} />
             <Route path="ai-assistant" element={<AIAssistant />} />
             <Route path="estimator" element={<Estimator />} />
+            <Route path="pm-helper" element={<PMHelper />} />
           </Route>
         </Routes>
       </BrowserRouter>
