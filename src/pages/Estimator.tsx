@@ -418,14 +418,13 @@ export function Estimator() {
 
       if (error) {
         console.error('Error saving estimate:', error);
-        alert('Failed to save estimate. Please try again.');
+        alert(`Failed to save estimate: ${error.message}`);
         return;
       }
 
       if (savedEstimate) {
         setSavedEstimateId(savedEstimate.id);
         loadEstimateHistory(); // Refresh history
-        alert('Estimate saved successfully!');
       }
     } catch (error) {
       console.error('Error saving estimate:', error);
