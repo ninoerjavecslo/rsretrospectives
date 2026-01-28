@@ -5,11 +5,11 @@ import {
   Button, Input, Textarea, Select, Checkbox, Card, CardHeader,
   StatusBadge, HealthBadge, LoadingSpinner, Variance, StatCard
 } from '../components/ui';
-import { 
+import {
   fetchProjectWithDetails, updateProject, deleteProject,
   createScopeItem, updateScopeItem, deleteScopeItem,
   createExternalCost, updateExternalCost, deleteExternalCost,
-  createChangeRequest, deleteChangeRequest,
+  createChangeRequest, updateChangeRequest, deleteChangeRequest,
   calculateMetrics, supabase
 } from '../lib/supabase';
 import type { 
@@ -18,7 +18,7 @@ import type {
 } from '../types';
 
 const PROFILE_LIST: Profile[] = ['UX', 'UI', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
-const SCOPE_TYPE_LIST: ScopeItemType[] = ['Wireframe', 'Component', 'Page', 'Template', 'Integration', 'Custom'];
+const SCOPE_TYPE_LIST: ScopeItemType[] = ['Wireframe', 'Component', 'Page', 'Template', 'Integration', 'Content', 'Custom'];
 const STATUS_OPTIONS = [
   { value: 'draft', label: 'Draft' },
   { value: 'active', label: 'Active' },
@@ -156,6 +156,20 @@ export function ProjectDetail() {
         }
       }
 
+      for (const cr of changeRequests) {
+        if (cr.id.startsWith('new-')) {
+          await createChangeRequest(project.id, {
+            description: cr.description,
+            amount: cr.amount,
+          });
+        } else {
+          await updateChangeRequest(cr.id, {
+            description: cr.description,
+            amount: cr.amount,
+          });
+        }
+      }
+
       await loadProject();
       setEditMode(false);
     } catch (error) {
@@ -204,17 +218,21 @@ export function ProjectDetail() {
     }]);
   }
 
-  async function addChangeRequest() {
+  function addChangeRequest() {
     if (!project) return;
-    const cr = await createChangeRequest(project.id, {
-      description: 'New change request',
+    setChangeRequests([...changeRequests, {
+      id: `new-${Date.now()}`,
+      project_id: project.id,
+      description: '',
       amount: 0,
-    });
-    setChangeRequests([...changeRequests, cr]);
+      created_at: new Date().toISOString(),
+    }]);
   }
 
-  async function removeChangeRequest(crId: string) {
-    await deleteChangeRequest(crId);
+  function removeChangeRequest(crId: string) {
+    if (!crId.startsWith('new-')) {
+      deleteChangeRequest(crId);
+    }
     setChangeRequests(changeRequests.filter(cr => cr.id !== crId));
   }
 
@@ -504,6 +522,74 @@ export function ProjectDetail() {
             )}
           </Card>
 
+          {/* Change Requests */}
+          <Card padding={false}>
+            <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <h2 className="text-base font-semibold text-slate-900">Change Requests</h2>
+              {editMode && (
+                <Button variant="ghost" size="sm" onClick={addChangeRequest}>
+                  <Plus className="w-4 h-4" /> Add
+                </Button>
+              )}
+            </div>
+
+            {changeRequests.length === 0 ? (
+              <div className="p-6 text-center text-slate-400">
+                No change requests yet.
+              </div>
+            ) : (
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Description</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                    {editMode && <th className="px-4 py-3 w-10"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {changeRequests.map((cr) => (
+                    <tr key={cr.id} className="border-b border-slate-100">
+                      <td className="px-6 py-3">
+                        {editMode ? (
+                          <input type="text" value={cr.description} placeholder="Description..."
+                            onChange={(e) => setChangeRequests(changeRequests.map(c => c.id === cr.id ? { ...c, description: e.target.value } : c))}
+                            className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                          />
+                        ) : (
+                          <span className="text-sm text-slate-700">{cr.description}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        {editMode ? (
+                          <input type="number" value={cr.amount}
+                            onChange={(e) => setChangeRequests(changeRequests.map(c => c.id === cr.id ? { ...c, amount: Number(e.target.value) } : c))}
+                            className="w-28 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                          />
+                        ) : (
+                          <span className="text-sm font-semibold text-emerald-500">+€{cr.amount.toLocaleString()}</span>
+                        )}
+                      </td>
+                      {editMode && (
+                        <td className="px-4 py-3">
+                          <button onClick={() => removeChangeRequest(cr.id)} className="text-slate-400 hover:text-red-500">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200">
+                    <td className="px-6 py-3 font-bold text-slate-900">Total CRs</td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-500">+€{crTotal.toLocaleString()}</td>
+                    {editMode && <td className="px-4 py-3"></td>}
+                  </tr>
+                </tfoot>
+              </table>
+            )}
+          </Card>
+
           {/* Retrospective */}
           <Card>
             <CardHeader title="Retrospective" />
@@ -578,33 +664,6 @@ export function ProjectDetail() {
             )}
           </Card>
 
-          {/* Change Requests */}
-          <Card>
-            <CardHeader title="Change Requests" action={editMode && <Button variant="ghost" size="sm" onClick={addChangeRequest}><Plus className="w-3 h-3" /> Add</Button>} />
-            {changeRequests.length === 0 ? (
-              <p className="text-sm text-slate-400">No change requests</p>
-            ) : (
-              <div className="space-y-2">
-                {changeRequests.map((cr) => (
-                  <div key={cr.id} className="flex justify-between items-center py-2 border-b border-slate-100 last:border-0">
-                    <span className="text-sm text-slate-700">{cr.description}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-emerald-500">+€{cr.amount.toLocaleString()}</span>
-                      {editMode && (
-                        <button onClick={() => removeChangeRequest(cr.id)} className="text-slate-400 hover:text-red-500">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                <div className="flex justify-between pt-2 border-t-2 border-slate-200">
-                  <span className="text-sm font-semibold">Total CRs</span>
-                  <span className="text-sm font-bold text-emerald-500">+€{crTotal.toLocaleString()}</span>
-                </div>
-              </div>
-            )}
-          </Card>
 
           {/* External Costs */}
           <Card>

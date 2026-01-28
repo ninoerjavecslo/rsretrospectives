@@ -53,11 +53,11 @@ export interface ChangeRequest {
 
 export type Profile = 'UX' | 'UI' | 'DEV' | 'PM' | 'CONTENT' | 'ANALYTICS';
 
-export type ScopeItemType = 'Wireframe' | 'Component' | 'Page' | 'Template' | 'Integration' | 'Custom';
+export type ScopeItemType = 'Wireframe' | 'Component' | 'Page' | 'Template' | 'Integration' | 'Content' | 'Custom';
 
 export const PROFILES: Profile[] = ['UX', 'UI', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
 
-export const SCOPE_ITEM_TYPES: ScopeItemType[] = ['Wireframe', 'Component', 'Page', 'Template', 'Integration', 'Custom'];
+export const SCOPE_ITEM_TYPES: ScopeItemType[] = ['Wireframe', 'Component', 'Page', 'Template', 'Integration', 'Content', 'Custom'];
 
 export interface ProjectWithDetails extends Project {
   profile_hours: ProfileHours[];
