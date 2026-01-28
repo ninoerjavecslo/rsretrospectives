@@ -848,7 +848,6 @@ export function ProjectDetail() {
                   { label: 'CMS', value: project.cms },
                   { label: 'Integrations', value: project.integrations },
                   { label: 'Base Offer', value: `€${project.offer_value.toLocaleString()}` },
-                  { label: 'Est. Margin', value: `${project.estimated_profit_margin}%` },
                 ].map((item, i) => (
                   <div key={i} className="flex justify-between py-2 border-b border-slate-100 last:border-0">
                     <span className="text-sm text-slate-500">{item.label}</span>
@@ -860,14 +859,12 @@ export function ProjectDetail() {
           </Card>
 
           {/* Danger Zone */}
-          {editMode && (
-            <Card className="border-red-200 bg-red-50">
-              <CardHeader title="Danger Zone" />
-              <Button variant="danger" size="sm" onClick={handleDelete}>
-                <Trash2 className="w-4 h-4" /> Delete Project
-              </Button>
-            </Card>
-          )}
+          <Card className="border-red-200 bg-red-50">
+            <CardHeader title="Danger Zone" />
+            <Button variant="danger" size="sm" onClick={handleDelete}>
+              <Trash2 className="w-4 h-4" /> Delete Project
+            </Button>
+          </Card>
         </div>
       </div>
     </div>
