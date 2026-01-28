@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight, Upload, FileText, Lock } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight, Upload, FileText, Lock, Sparkles } from 'lucide-react';
 import mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 
@@ -20,9 +20,10 @@ import {
   calculateMetrics, supabase
 } from '../lib/supabase';
 import { exportProjectPDF } from '../lib/export';
+import { OfferImportModal } from '../components/OfferImportModal';
 import type {
   ProjectWithDetails, ProfileHours, ScopeItem, ExternalCost, ChangeRequest,
-  Profile, ScopeItemType, ProjectOutcome, CostType
+  Profile, ScopeItemType, ProjectOutcome, CostType, ParsedOffer
 } from '../types';
 
 const PROFILE_LIST: Profile[] = ['UX', 'UI', 'DESIGN', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
@@ -75,6 +76,7 @@ export function ProjectDetail() {
   const [externalCosts, setExternalCosts] = useState<ExternalCost[]>([]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
   const [expandedCRs, setExpandedCRs] = useState<Set<string>>(new Set());
+  const [showOfferImport, setShowOfferImport] = useState(false);
 
   useEffect(() => {
     if (id) loadProject();
@@ -275,6 +277,51 @@ export function ProjectDetail() {
     setEditMode(false);
   }
 
+  function handleApplyOffer(data: ParsedOffer) {
+    // Apply parsed offer data to form
+    setFormData(prev => ({
+      ...prev,
+      name: data.name || prev.name,
+      client: data.client || prev.client,
+      project_type: data.project_type || prev.project_type,
+      cms: data.cms || prev.cms,
+      integrations: data.integrations || prev.integrations,
+      offer_value: data.offer_value || prev.offer_value,
+      brief_text: data.brief_summary || prev.brief_text,
+    }));
+
+    // Apply profile hours
+    if (data.profile_hours.length > 0) {
+      setProfileHours(prev => {
+        const updated = [...prev];
+        for (const ph of data.profile_hours) {
+          const existing = updated.find(p => p.profile === ph.profile);
+          if (existing) {
+            existing.estimated_hours = ph.estimated_hours;
+          }
+        }
+        return updated;
+      });
+    }
+
+    // Apply scope items
+    if (data.scope_items.length > 0) {
+      const newScopeItems: ScopeItem[] = data.scope_items.map((item, idx) => ({
+        id: `new-import-${Date.now()}-${idx}`,
+        project_id: project!.id,
+        name: item.name,
+        type: item.type,
+        planned_count: item.quantity,
+        actual_count: 0,
+        notes: item.notes || '',
+      }));
+      setScopeItems(prev => [...prev, ...newScopeItems]);
+    }
+
+    // Enter edit mode to review
+    setEditMode(true);
+  }
+
   function addScopeItem() {
     setScopeItems([...scopeItems, {
       id: `new-${Date.now()}`,
@@ -434,6 +481,11 @@ export function ProjectDetail() {
           {!editMode ? (
             <>
               <Button variant="secondary" onClick={() => exportProjectPDF(displayProject, metrics)}><FileDown className="w-4 h-4" /> Export PDF</Button>
+              {canEdit && (
+                <Button variant="secondary" onClick={() => setShowOfferImport(true)}>
+                  <Sparkles className="w-4 h-4" /> Import Offer
+                </Button>
+              )}
               {canEdit ? (
                 <Button onClick={() => setEditMode(true)}>Edit Project</Button>
               ) : (
@@ -444,6 +496,9 @@ export function ProjectDetail() {
             </>
           ) : (
             <>
+              <Button variant="secondary" onClick={() => setShowOfferImport(true)}>
+                <Sparkles className="w-4 h-4" /> Import Offer
+              </Button>
               <Button variant="secondary" onClick={handleCancel}><X className="w-4 h-4" /> Cancel</Button>
               <Button variant="success" onClick={handleSave} disabled={saving}>
                 <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
@@ -1113,6 +1168,13 @@ export function ProjectDetail() {
           )}
         </div>
       </div>
+
+      {/* Offer Import Modal */}
+      <OfferImportModal
+        isOpen={showOfferImport}
+        onClose={() => setShowOfferImport(false)}
+        onApply={handleApplyOffer}
+      />
     </div>
   );
 }

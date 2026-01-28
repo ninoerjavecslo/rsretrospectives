@@ -175,3 +175,26 @@ export interface AIFeedback {
   correction: string | null;
   notes: string | null;
 }
+
+// Parsed offer from AI
+export interface ParsedOffer {
+  name?: string;
+  client?: string;
+  project_type?: string;
+  cms?: string;
+  integrations?: string;
+  offer_value?: number;
+  profile_hours: {
+    profile: Profile;
+    estimated_hours: number;
+  }[];
+  scope_items: {
+    name: string;
+    type: ScopeItemType;
+    quantity: number;
+    notes?: string;
+  }[];
+  brief_summary?: string;
+  confidence: 'low' | 'medium' | 'high';
+  warnings?: string[];
+}
