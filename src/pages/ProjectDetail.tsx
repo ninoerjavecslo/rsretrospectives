@@ -440,7 +440,7 @@ export function ProjectDetail() {
       </div>
 
       {/* Financial Cards */}
-      <div className="grid grid-cols-5 gap-4 mb-6">
+      <div className="grid grid-cols-6 gap-4 mb-6">
         <StatCard
           label="Total Value"
           value={`€${metrics.totalValue.toLocaleString()}`}
@@ -451,6 +451,12 @@ export function ProjectDetail() {
           value={`${metrics.actualHours}h`}
           subtext={`/ ${metrics.estimatedHours}h estimated`}
           trend={metrics.hoursVariance !== 0 ? `${metrics.hoursVariance > 0 ? '+' : ''}${metrics.hoursVariance}h (${metrics.hoursVariancePercent.toFixed(0)}%)` : undefined}
+        />
+        <StatCard
+          label="External Costs"
+          value={`€${metrics.actualExternalCost.toLocaleString()}`}
+          subtext={`€${metrics.estimatedExternalCost.toLocaleString()} planned`}
+          trend={metrics.actualExternalCost !== metrics.estimatedExternalCost ? `${metrics.actualExternalCost > metrics.estimatedExternalCost ? '+' : ''}€${(metrics.actualExternalCost - metrics.estimatedExternalCost).toLocaleString()}` : undefined}
         />
         <StatCard
           label="Planned Rate"
