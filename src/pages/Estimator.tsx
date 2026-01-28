@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Calculator, Upload, FileText, AlertTriangle, TrendingUp, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 import { Button, Card, Input, Textarea, Select, LoadingSpinner } from '../components/ui';
 import { fetchProjectsWithMetrics, fetchAnalyticsData, supabase, TARGET_MARGIN_MIN, INTERNAL_HOURLY_COST } from '../lib/supabase';
 import type { Profile } from '../types';
@@ -198,19 +202,38 @@ export function Estimator() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.name.endsWith('.docx')) {
-      // Parse Word document
-      const arrayBuffer = await file.arrayBuffer();
-      const result = await mammoth.extractRawText({ arrayBuffer });
-      setBriefText(result.value);
-    } else {
-      // Plain text files
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const text = event.target?.result as string;
-        setBriefText(text);
-      };
-      reader.readAsText(file);
+    try {
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        // Parse Word document
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        setBriefText(result.value);
+      } else if (file.name.toLowerCase().endsWith('.pdf')) {
+        // Parse PDF document
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            .map((item) => ('str' in item ? item.str : ''))
+            .join(' ');
+          fullText += pageText + '\n\n';
+        }
+        setBriefText(fullText.trim());
+      } else {
+        // Plain text files
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const text = event.target?.result as string;
+          setBriefText(text);
+        };
+        reader.readAsText(file);
+      }
+    } catch (error) {
+      console.error('Error reading file:', error);
+      alert('Error reading file. Please try a different file or paste the text directly.');
     }
   }
 
@@ -242,7 +265,7 @@ export function Estimator() {
               <label className="cursor-pointer">
                 <input
                   type="file"
-                  accept=".txt,.md,.doc,.docx"
+                  accept=".txt,.md,.docx,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
