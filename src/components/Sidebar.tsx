@@ -1,0 +1,48 @@
+import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, FolderKanban, BarChart3, Users } from 'lucide-react';
+
+const navItems = [
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/projects', icon: FolderKanban, label: 'Projects' },
+  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
+  { to: '/team', icon: Users, label: 'Team Performance' },
+];
+
+export function Sidebar() {
+  return (
+    <div className="w-60 bg-slate-900 min-h-screen flex flex-col shrink-0">
+      {/* Logo */}
+      <div className="p-5 border-b border-slate-800">
+        <div className="text-lg font-bold text-white tracking-tight">RENDERSPACE</div>
+        <div className="text-xs text-slate-500 mt-0.5">Project Intelligence</div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="p-3 flex-1">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `flex items-center gap-3 w-full px-4 py-3 rounded-lg text-sm font-medium mb-1 transition-colors ${
+                isActive
+                  ? 'bg-slate-800 text-white'
+                  : 'text-slate-400 hover:text-slate-300 hover:bg-slate-800/50'
+              }`
+            }
+          >
+            <item.icon className="w-5 h-5 opacity-70" />
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {/* Footer */}
+      <div className="p-3 border-t border-slate-800">
+        <div className="px-4 py-3 text-xs text-slate-500">
+          Internal Tool v1.0
+        </div>
+      </div>
+    </div>
+  );
+}
