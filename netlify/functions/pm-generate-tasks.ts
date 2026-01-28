@@ -231,13 +231,13 @@ Respond with the JSON format specified.`;
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.4,
-        max_tokens: 8000,
+        temperature: 0.3,
+        max_tokens: 4000,
       }),
     });
 

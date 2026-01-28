@@ -6,6 +6,14 @@
 [functions]
   node_bundler = "esbuild"
 
+[functions."pm-generate-tasks"]
+  external_node_modules = ["openai"]
+
+# Increase timeout for AI functions (max 26s on Pro, 10s on Free)
+[[functions]]
+  function = "pm-generate-tasks"
+  timeout = 26
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

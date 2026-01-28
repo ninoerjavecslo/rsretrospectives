@@ -250,6 +250,7 @@ export function PMHelper() {
       }
     } catch (error) {
       console.error('Error saving generation:', error);
+      alert(`Failed to save: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
@@ -273,6 +274,7 @@ export function PMHelper() {
       loadTemplates();
     } catch (error) {
       console.error('Error saving template:', error);
+      alert(`Failed to save template: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
