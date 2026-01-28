@@ -1,11 +1,17 @@
 import type { Handler, HandlerEvent } from '@netlify/functions';
+import { createClient } from '@supabase/supabase-js';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.VITE_SUPABASE_ANON_KEY || '';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 interface GenerateTasksRequest {
   offer_text: string;
   additional_notes?: string;
   language?: 'en' | 'sl';
+  job_id?: string; // For polling
 }
 
 const SYSTEM_PROMPT_EN = `You are a project manager. Analyze project offers and create Jira tasks.
@@ -43,36 +49,79 @@ const handler: Handler = async (event: HandlerEvent) => {
   }
 
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method not allowed' }),
-    };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   if (!OPENAI_API_KEY) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'OpenAI API key not configured' }),
-    };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'OpenAI API key not configured' }) };
   }
 
   try {
     const request = JSON.parse(event.body || '{}') as GenerateTasksRequest;
 
-    if (!request.offer_text || request.offer_text.trim().length < 50) {
+    // If job_id is provided, this is a poll request
+    if (request.job_id) {
+      const { data, error } = await supabase
+        .from('pm_jobs')
+        .select('*')
+        .eq('id', request.job_id)
+        .single();
+
+      if (error || !data) {
+        return { statusCode: 404, headers, body: JSON.stringify({ error: 'Job not found' }) };
+      }
+
       return {
-        statusCode: 400,
+        statusCode: 200,
         headers,
-        body: JSON.stringify({ error: 'Offer text is required (minimum 50 characters)' }),
+        body: JSON.stringify({
+          status: data.status,
+          result: data.result,
+          error: data.error_message,
+        }),
       };
     }
 
+    // Validate input
+    if (!request.offer_text || request.offer_text.trim().length < 50) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Offer text is required (minimum 50 characters)' }) };
+    }
+
+    // Create a job record
+    const { data: job, error: jobError } = await supabase
+      .from('pm_jobs')
+      .insert({ status: 'pending', offer_text: request.offer_text.slice(0, 3000) })
+      .select()
+      .single();
+
+    if (jobError || !job) {
+      console.error('Failed to create job:', jobError);
+      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create job' }) };
+    }
+
+    // Return job ID immediately - process in background
+    // Note: We'll process synchronously but return early by not awaiting
+    const jobId = job.id;
+
+    // Process the request (this will complete after we return)
+    processJob(jobId, request).catch(err => console.error('Job processing error:', err));
+
+    return {
+      statusCode: 202,
+      headers,
+      body: JSON.stringify({ job_id: jobId, status: 'pending' }),
+    };
+
+  } catch (error) {
+    console.error('PM generate tasks function error:', error);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: 'Internal server error' }) };
+  }
+};
+
+async function processJob(jobId: string, request: GenerateTasksRequest) {
+  try {
     const language = request.language || 'en';
     const systemPrompt = language === 'sl' ? SYSTEM_PROMPT_SL : SYSTEM_PROMPT_EN;
-
-    // Truncate offer text if too long to speed up response
     const offerText = request.offer_text.slice(0, 3000);
 
     const userPrompt = `Project offer:\n${offerText}\n${request.additional_notes ? `\nNotes: ${request.additional_notes}` : ''}\n\nGenerate Jira tasks JSON.`;
@@ -96,49 +145,29 @@ const handler: Handler = async (event: HandlerEvent) => {
 
     if (!response.ok) {
       const error = await response.text();
-      console.error('OpenAI error:', error);
-      return {
-        statusCode: response.status,
-        headers,
-        body: JSON.stringify({ error: 'OpenAI API error' }),
-      };
+      await supabase.from('pm_jobs').update({ status: 'error', error_message: 'OpenAI API error' }).eq('id', jobId);
+      return;
     }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
 
-    try {
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        throw new Error('No JSON found in response');
-      }
-      const result = JSON.parse(jsonMatch[0]);
-
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({ result }),
-      };
-    } catch (parseError) {
-      console.error('Failed to parse tasks:', content);
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          result: null,
-          raw: content,
-          error: 'Failed to parse AI response',
-        }),
-      };
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      await supabase.from('pm_jobs').update({ status: 'error', error_message: 'Failed to parse AI response' }).eq('id', jobId);
+      return;
     }
+
+    const result = JSON.parse(jsonMatch[0]);
+    await supabase.from('pm_jobs').update({ status: 'completed', result }).eq('id', jobId);
+
   } catch (error) {
-    console.error('PM generate tasks function error:', error);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: 'Internal server error' }),
-    };
+    console.error('Process job error:', error);
+    await supabase.from('pm_jobs').update({
+      status: 'error',
+      error_message: error instanceof Error ? error.message : 'Unknown error'
+    }).eq('id', jobId);
   }
-};
+}
 
 export { handler };

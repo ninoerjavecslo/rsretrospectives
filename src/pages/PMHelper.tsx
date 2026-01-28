@@ -198,7 +198,8 @@ export function PMHelper() {
     setSelectedTasks(new Set());
 
     try {
-      const response = await fetch('/.netlify/functions/pm-generate-tasks', {
+      // Step 1: Start the job
+      const startResponse = await fetch('/.netlify/functions/pm-generate-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -208,25 +209,56 @@ export function PMHelper() {
         }),
       });
 
-      const data = await response.json();
+      const startData = await startResponse.json();
 
-      if (data.error) {
-        throw new Error(data.error);
+      if (startData.error) {
+        throw new Error(startData.error);
       }
 
-      if (data.result) {
-        setResult(data.result);
-        setEditedTasks(data.result.tasks || []);
-        if (data.result.detected_project_name) {
-          setProjectName(data.result.detected_project_name);
+      if (!startData.job_id) {
+        throw new Error('Failed to start job');
+      }
+
+      // Step 2: Poll for results
+      const jobId = startData.job_id;
+      let attempts = 0;
+      const maxAttempts = 30; // 30 seconds max
+
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+        attempts++;
+
+        const pollResponse = await fetch('/.netlify/functions/pm-generate-tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: jobId }),
+        });
+
+        const pollData = await pollResponse.json();
+
+        if (pollData.status === 'completed' && pollData.result) {
+          setResult(pollData.result);
+          setEditedTasks(pollData.result.tasks || []);
+          if (pollData.result.detected_project_name) {
+            setProjectName(pollData.result.detected_project_name);
+          }
+          setLoading(false);
+          return;
         }
+
+        if (pollData.status === 'error') {
+          throw new Error(pollData.error || 'Job failed');
+        }
+
+        // Still pending, continue polling
       }
+
+      throw new Error('Timeout waiting for results');
     } catch (error) {
       console.error('Error generating tasks:', error);
       alert('Failed to generate tasks. Please try again.');
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   async function saveGeneration() {
