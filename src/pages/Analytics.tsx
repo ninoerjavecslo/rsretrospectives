@@ -4,7 +4,7 @@ import { FileDown } from 'lucide-react';
 import {
   Button, StatCard, Card, LoadingSpinner, Variance
 } from '../components/ui';
-import { fetchAnalyticsData, TARGET_MARGIN_MIN, TARGET_MARGIN_MAX } from '../lib/supabase';
+import { fetchAnalyticsData, TARGET_MARGIN_MIN, TARGET_MARGIN_MAX, INTERNAL_HOURLY_COST } from '../lib/supabase';
 import { exportAnalyticsExcel } from '../lib/export';
 import type { ProjectWithDetails, ProjectMetrics } from '../types';
 import {
@@ -399,6 +399,7 @@ export function TeamPerformance() {
     let accurateProjects = 0;
     let totalProjectsWithProfile = 0;
     let marginImpact = 0;
+    let internalCostImpact = 0;
 
     for (const project of data.projects) {
       const profileHour = project.profile_hours.find(ph => ph.profile === profile);
@@ -410,9 +411,12 @@ export function TeamPerformance() {
         if (projectVariance <= 10) {
           accurateProjects++;
         }
-        // Calculate margin impact (hours over * hourly rate approximation)
+        // Calculate impacts based on hours variance
         const hoursOver = profileHour.actual_hours - profileHour.estimated_hours;
-        marginImpact += hoursOver * 75; // Approximate hourly rate
+        // Margin impact: use actual project hourly rate (revenue per hour)
+        marginImpact += hoursOver * project.metrics.actualHourlyRate;
+        // Internal cost impact: use internal hourly cost (€30)
+        internalCostImpact += hoursOver * INTERNAL_HOURLY_COST;
       }
     }
 
@@ -428,6 +432,7 @@ export function TeamPerformance() {
       totalProjectsWithProfile,
       accuracyRate,
       marginImpact,
+      internalCostImpact,
     };
   });
 
@@ -485,6 +490,15 @@ export function TeamPerformance() {
                   <div className={`text-lg font-semibold ${item.marginImpact > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
                     {item.marginImpact > 0 ? '-' : '+'}€{Math.abs(item.marginImpact).toLocaleString()}
                   </div>
+                  <div className="text-xs text-slate-400">based on project hourly rates</div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-slate-500 uppercase mb-1">Internal Cost Impact</div>
+                  <div className={`text-lg font-semibold ${item.internalCostImpact > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                    {item.internalCostImpact > 0 ? '-' : '+'}€{Math.abs(item.internalCostImpact).toLocaleString()}
+                  </div>
+                  <div className="text-xs text-slate-400">at €{INTERNAL_HOURLY_COST}/h internal cost</div>
                 </div>
 
                 <div className="pt-3 border-t border-slate-100">
