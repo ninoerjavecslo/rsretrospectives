@@ -13,6 +13,8 @@ export interface Project {
   scope_creep_notes: string;
   status: 'draft' | 'active' | 'completed';
   project_outcome: ProjectOutcome | null;
+  brief_url: string | null;
+  brief_text: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -99,4 +101,77 @@ export interface ProjectMetrics {
   estimatedHourlyRate: number;
   actualHourlyRate: number;
   health: 'on-track' | 'at-risk' | 'over-budget';
+}
+
+// AI Types
+export interface AIMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: string;
+}
+
+export interface AIConversation {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  title: string | null;
+  messages: AIMessage[];
+}
+
+export interface AIEstimateInput {
+  brief_text: string;
+  project_type: string;
+  cms: string;
+  integrations: string;
+  scope_items: {
+    pages?: number;
+    components?: number;
+    templates?: number;
+    integrations?: number;
+    wireframes?: number;
+  };
+}
+
+export interface AIEstimateResult {
+  profiles: {
+    [key in Profile]?: {
+      optimistic: number;
+      realistic: number;
+      pessimistic: number;
+    };
+  };
+  total: {
+    optimistic: number;
+    realistic: number;
+    pessimistic: number;
+  };
+}
+
+export interface AIEstimate {
+  id: string;
+  created_at: string;
+  brief_text: string | null;
+  project_type: string | null;
+  cms: string | null;
+  integrations: string | null;
+  scope_items: AIEstimateInput['scope_items'] | null;
+  estimate_result: AIEstimateResult | null;
+  suggested_price: number | null;
+  confidence: 'low' | 'medium' | 'high' | null;
+  risks: string[] | null;
+  similar_projects: { id: string; name: string; similarity: number }[] | null;
+  user_feedback: 'good' | 'bad' | 'neutral' | null;
+  feedback_notes: string | null;
+  actual_project_id: string | null;
+  accuracy_notes: string | null;
+}
+
+export interface AIFeedback {
+  id: string;
+  created_at: string;
+  conversation_id: string;
+  message_index: number;
+  rating: 'good' | 'bad' | 'corrected';
+  correction: string | null;
+  notes: string | null;
 }

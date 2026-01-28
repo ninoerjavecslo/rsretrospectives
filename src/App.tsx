@@ -4,6 +4,8 @@ import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Analytics, TeamPerformance } from './pages/Analytics';
+import { AIAssistant } from './pages/AIAssistant';
+import { Estimator } from './pages/Estimator';
 
 export default function App() {
   return (
@@ -15,6 +17,8 @@ export default function App() {
           <Route path="projects/:id" element={<ProjectDetail />} />
           <Route path="analytics" element={<Analytics />} />
           <Route path="team" element={<TeamPerformance />} />
+          <Route path="ai-assistant" element={<AIAssistant />} />
+          <Route path="estimator" element={<Estimator />} />
         </Route>
       </Routes>
     </BrowserRouter>

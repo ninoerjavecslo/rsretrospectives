@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight, Upload, FileText } from 'lucide-react';
 import {
   Button, Input, Textarea, Select, Checkbox, Card, CardHeader,
   StatusBadge, LoadingSpinner, Variance, StatCard
@@ -102,6 +102,7 @@ export function ProjectDetail() {
       scope_creep_notes: data.scope_creep_notes,
       status: data.status,
       project_outcome: data.project_outcome,
+      brief_text: data.brief_text,
     });
     
     const existingProfiles = new Set(data.profile_hours.map(ph => ph.profile));
@@ -1006,6 +1007,59 @@ export function ProjectDetail() {
                 )}
               </div>
             )}
+          </Card>
+
+          {/* Initial Brief */}
+          <Card>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-slate-500" />
+                <span className="text-sm font-semibold text-slate-900">Initial Brief</span>
+              </div>
+              {editMode && (
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".txt,.md"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const text = event.target?.result as string;
+                          setFormData({ ...formData, brief_text: text });
+                        };
+                        reader.readAsText(file);
+                      }
+                    }}
+                    className="hidden"
+                  />
+                  <span className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
+                    <Upload className="w-3 h-3" /> Upload
+                  </span>
+                </label>
+              )}
+            </div>
+            {editMode ? (
+              <textarea
+                value={formData.brief_text || ''}
+                onChange={(e) => setFormData({ ...formData, brief_text: e.target.value })}
+                placeholder="Paste or upload the initial project brief..."
+                rows={6}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            ) : (
+              <div className="text-sm text-slate-600">
+                {project.brief_text ? (
+                  <p className="whitespace-pre-wrap line-clamp-6">{project.brief_text}</p>
+                ) : (
+                  <p className="text-slate-400 italic">No brief uploaded</p>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-slate-400 mt-2">
+              Used by AI to improve future estimates
+            </p>
           </Card>
 
           {/* Danger Zone */}
