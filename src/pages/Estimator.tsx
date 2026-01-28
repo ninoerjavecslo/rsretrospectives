@@ -19,8 +19,12 @@ const CMS_OPTIONS = [
   { value: 'wordpress', label: 'WordPress' },
   { value: 'webflow', label: 'Webflow' },
   { value: 'shopify', label: 'Shopify' },
+  { value: 'payload', label: 'Payload' },
+  { value: 'statamic', label: 'Statamic' },
+  { value: 'umbraco', label: 'Umbraco' },
+  { value: 'adobe_aem', label: 'Adobe AEM' },
   { value: 'custom', label: 'Custom' },
-  { value: 'headless', label: 'Headless CMS' },
+  { value: 'headless', label: 'Headless CMS (Other)' },
   { value: 'none', label: 'None' },
 ];
 
