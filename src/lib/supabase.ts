@@ -18,16 +18,21 @@ export function calculateMetrics(project: ProjectWithDetails): ProjectMetrics {
   const changeRequestsTotal = project.change_requests?.reduce((sum, cr) => sum + cr.amount, 0) || 0;
   const totalValue = project.offer_value + changeRequestsTotal;
 
-  const estimatedHours = project.profile_hours?.reduce((sum, ph) => sum + ph.estimated_hours, 0) || 0;
+  const baseEstimatedHours = project.profile_hours?.reduce((sum, ph) => sum + ph.estimated_hours, 0) || 0;
   const baseActualHours = project.profile_hours?.reduce((sum, ph) => sum + ph.actual_hours, 0) || 0;
 
-  // Add CR hours to actual hours total
+  // CR hours are paid work, so they count as both expected and actual
   const crHours = project.change_requests?.reduce((sum, cr) =>
     sum + (cr.hours?.reduce((s, h) => s + h.actual_hours, 0) || 0), 0) || 0;
+
+  // Total expected = initial estimate + CR hours (CR hours are "expected" since paid)
+  const estimatedHours = baseEstimatedHours + crHours;
+  // Total actual = initial actual + CR hours
   const actualHours = baseActualHours + crHours;
 
-  const hoursVariance = actualHours - estimatedHours;
-  const hoursVariancePercent = estimatedHours > 0 ? (hoursVariance / estimatedHours) * 100 : 0;
+  // Variance only reflects base project accuracy (CR hours cancel out)
+  const hoursVariance = actualHours - estimatedHours; // = baseActual - baseEstimated
+  const hoursVariancePercent = baseEstimatedHours > 0 ? ((baseActualHours - baseEstimatedHours) / baseEstimatedHours) * 100 : 0;
 
   const estimatedExternalCost = project.external_costs?.reduce((sum, ec) => sum + ec.estimated_cost, 0) || 0;
   const actualExternalCost = project.external_costs?.reduce((sum, ec) => sum + ec.actual_cost, 0) || 0;
