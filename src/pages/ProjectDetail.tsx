@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight, Upload, FileText, Lock } from 'lucide-react';
+import mammoth from 'mammoth';
 import { useEdit } from '../context/EditContext';
 import {
   Button, Input, Textarea, Select, Checkbox, Card, CardHeader,
@@ -1028,10 +1029,18 @@ export function ProjectDetail() {
                 <label className="cursor-pointer">
                   <input
                     type="file"
-                    accept=".txt,.md"
-                    onChange={(e) => {
+                    accept=".txt,.md,.docx"
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
-                      if (file) {
+                      if (!file) return;
+
+                      if (file.name.endsWith('.docx')) {
+                        // Parse Word document
+                        const arrayBuffer = await file.arrayBuffer();
+                        const result = await mammoth.extractRawText({ arrayBuffer });
+                        setFormData({ ...formData, brief_text: result.value });
+                      } else {
+                        // Plain text files
                         const reader = new FileReader();
                         reader.onload = (event) => {
                           const text = event.target?.result as string;

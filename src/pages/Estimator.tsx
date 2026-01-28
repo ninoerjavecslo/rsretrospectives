@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Calculator, Upload, FileText, AlertTriangle, TrendingUp, X, ThumbsUp, ThumbsDown } from 'lucide-react';
+import mammoth from 'mammoth';
 import { Button, Card, Input, Textarea, Select, LoadingSpinner } from '../components/ui';
 import { fetchProjectsWithMetrics, fetchAnalyticsData, supabase, TARGET_MARGIN_MIN, INTERNAL_HOURLY_COST } from '../lib/supabase';
 import type { Profile } from '../types';
@@ -193,16 +194,24 @@ export function Estimator() {
     }
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const text = event.target?.result as string;
-      setBriefText(text);
-    };
-    reader.readAsText(file);
+    if (file.name.endsWith('.docx')) {
+      // Parse Word document
+      const arrayBuffer = await file.arrayBuffer();
+      const result = await mammoth.extractRawText({ arrayBuffer });
+      setBriefText(result.value);
+    } else {
+      // Plain text files
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target?.result as string;
+        setBriefText(text);
+      };
+      reader.readAsText(file);
+    }
   }
 
   if (loadingData) {
