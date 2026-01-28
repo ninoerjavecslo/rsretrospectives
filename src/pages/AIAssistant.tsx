@@ -153,16 +153,22 @@ ${summary}`;
       const title = msgs[0]?.content.slice(0, 50) + (msgs[0]?.content.length > 50 ? '...' : '');
 
       if (currentConversationId) {
-        await supabase
+        const { error } = await supabase
           .from('ai_conversations')
           .update({ messages: msgs, updated_at: new Date().toISOString() })
           .eq('id', currentConversationId);
+        if (error) {
+          console.error('Error updating conversation:', error);
+        }
       } else {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('ai_conversations')
           .insert([{ title, messages: msgs }])
           .select()
           .single();
+        if (error) {
+          console.error('Error inserting conversation:', error);
+        }
         if (data) {
           setCurrentConversationId(data.id);
         }

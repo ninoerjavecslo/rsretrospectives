@@ -1034,19 +1034,24 @@ export function ProjectDetail() {
                       const file = e.target.files?.[0];
                       if (!file) return;
 
-                      if (file.name.endsWith('.docx')) {
-                        // Parse Word document
-                        const arrayBuffer = await file.arrayBuffer();
-                        const result = await mammoth.extractRawText({ arrayBuffer });
-                        setFormData({ ...formData, brief_text: result.value });
-                      } else {
-                        // Plain text files
-                        const reader = new FileReader();
-                        reader.onload = (event) => {
-                          const text = event.target?.result as string;
-                          setFormData({ ...formData, brief_text: text });
-                        };
-                        reader.readAsText(file);
+                      try {
+                        if (file.name.toLowerCase().endsWith('.docx')) {
+                          // Parse Word document
+                          const arrayBuffer = await file.arrayBuffer();
+                          const result = await mammoth.extractRawText({ arrayBuffer });
+                          setFormData({ ...formData, brief_text: result.value });
+                        } else {
+                          // Plain text files
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const text = event.target?.result as string;
+                            setFormData({ ...formData, brief_text: text });
+                          };
+                          reader.readAsText(file);
+                        }
+                      } catch (error) {
+                        console.error('Error reading file:', error);
+                        alert('Error reading file. Please try a different file or paste the text directly.');
                       }
                     }}
                     className="hidden"
