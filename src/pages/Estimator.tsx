@@ -4,7 +4,7 @@ import mammoth from 'mammoth';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 import { Button, Card, Input, Textarea, Select, LoadingSpinner } from '../components/ui';
 import { fetchProjectsWithMetrics, fetchAnalyticsData, supabase, TARGET_MARGIN_MIN, INTERNAL_HOURLY_COST } from '../lib/supabase';
 import type { Profile } from '../types';
