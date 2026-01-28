@@ -1,7 +1,12 @@
-import { useState, useEffect } from 'react';
-import { ListTodo, Sparkles, History, BookTemplate, FolderSearch, Download, Copy, Check, Trash2, AlertTriangle, ChevronDown, ChevronRight, Save, Upload } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ListTodo, Sparkles, History, BookTemplate, Download, Copy, Check, Trash2, AlertTriangle, ChevronDown, ChevronRight, Save, Upload, FileText, Square, CheckSquare } from 'lucide-react';
+import mammoth from 'mammoth';
+import * as pdfjsLib from 'pdfjs-dist';
 import { Button, Card, Input, Textarea, LoadingSpinner } from '../components/ui';
 import { supabase } from '../lib/supabase';
+
+// Set up PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 // Types
 interface JiraTask {
@@ -10,8 +15,6 @@ interface JiraTask {
   task_type: 'Epic' | 'Story' | 'Task' | 'Subtask';
   priority: 'Highest' | 'High' | 'Medium' | 'Low' | 'Lowest';
   labels: string[];
-  story_points?: number;
-  acceptance_criteria?: string[];
   parent_ref?: string;
   order: number;
 }
@@ -22,9 +25,9 @@ interface GenerationResult {
     total_tasks: number;
     by_type: Record<string, number>;
     by_priority: Record<string, number>;
-    estimated_story_points: number;
   };
   recommendations: string[];
+  detected_project_name?: string;
 }
 
 interface Generation {
@@ -45,7 +48,10 @@ interface Template {
 }
 
 // Tab types
-type TabType = 'generate' | 'history' | 'templates' | 'reference';
+type TabType = 'generate' | 'history' | 'templates';
+
+// Language options
+type Language = 'en' | 'sl';
 
 // Priority colors
 const PRIORITY_COLORS: Record<string, string> = {
@@ -66,18 +72,21 @@ const TYPE_COLORS: Record<string, string> = {
 
 export function PMHelper() {
   const [activeTab, setActiveTab] = useState<TabType>('generate');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Generate tab state
-  const [projectName, setProjectName] = useState('');
-  const [projectBrief, setProjectBrief] = useState('');
-  const [scopeItems, setScopeItems] = useState('');
-  const [selectedTemplates, setSelectedTemplates] = useState('');
-  const [customInstructions, setCustomInstructions] = useState('');
+  const [offerText, setOfferText] = useState('');
+  const [additionalNotes, setAdditionalNotes] = useState('');
+  const [language, setLanguage] = useState<Language>('en');
+  const [fileName, setFileName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [parsing, setParsing] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [editedTasks, setEditedTasks] = useState<JiraTask[]>([]);
+  const [selectedTasks, setSelectedTasks] = useState<Set<number>>(new Set());
   const [copiedCSV, setCopiedCSV] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<number>>(new Set());
+  const [projectName, setProjectName] = useState('');
 
   // History tab state
   const [generations, setGenerations] = useState<Generation[]>([]);
@@ -96,6 +105,54 @@ export function PMHelper() {
       loadTemplates();
     }
   }, [activeTab]);
+
+  // Select all tasks when results come in
+  useEffect(() => {
+    if (editedTasks.length > 0) {
+      setSelectedTasks(new Set(editedTasks.map((_, i) => i)));
+    }
+  }, [editedTasks.length]);
+
+  async function handleFileUpload(file: File) {
+    setParsing(true);
+    setFileName(file.name);
+
+    try {
+      let text = '';
+
+      if (file.name.toLowerCase().endsWith('.docx')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await mammoth.extractRawText({ arrayBuffer });
+        text = result.value;
+      } else if (file.name.toLowerCase().endsWith('.pdf')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items
+            .map((item) => ('str' in item ? item.str : ''))
+            .join(' ');
+          text += pageText + '\n\n';
+        }
+      } else {
+        text = await file.text();
+      }
+
+      setOfferText(text);
+    } catch (error) {
+      console.error('Error parsing file:', error);
+      alert('Failed to parse file. Please try again or paste the text directly.');
+    }
+
+    setParsing(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleFileUpload(file);
+  }
 
   async function loadGenerations() {
     setLoadingHistory(true);
@@ -133,22 +190,21 @@ export function PMHelper() {
   }
 
   async function generateTasks() {
-    if (!projectName.trim() || !projectBrief.trim()) return;
+    if (!offerText.trim()) return;
 
     setLoading(true);
     setResult(null);
     setEditedTasks([]);
+    setSelectedTasks(new Set());
 
     try {
       const response = await fetch('/.netlify/functions/pm-generate-tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_name: projectName,
-          project_brief: projectBrief,
-          scope_items: scopeItems.split('\n').filter(s => s.trim()),
-          selected_templates: selectedTemplates.split('\n').filter(s => s.trim()),
-          custom_instructions: customInstructions,
+          offer_text: offerText,
+          additional_notes: additionalNotes,
+          language,
         }),
       });
 
@@ -161,9 +217,13 @@ export function PMHelper() {
       if (data.result) {
         setResult(data.result);
         setEditedTasks(data.result.tasks || []);
+        if (data.result.detected_project_name) {
+          setProjectName(data.result.detected_project_name);
+        }
       }
     } catch (error) {
       console.error('Error generating tasks:', error);
+      alert('Failed to generate tasks. Please try again.');
     }
 
     setLoading(false);
@@ -176,15 +236,15 @@ export function PMHelper() {
       const { error } = await supabase
         .from('pm_generations')
         .insert([{
-          project_name: projectName,
-          project_brief: projectBrief,
+          project_name: projectName || 'Untitled Project',
+          project_brief: offerText.substring(0, 500),
           tasks: editedTasks,
           summary: result.summary,
         }]);
 
       if (error) throw error;
+      alert('Saved!');
 
-      // Reload history if on history tab
       if (activeTab === 'history') {
         loadGenerations();
       }
@@ -201,7 +261,7 @@ export function PMHelper() {
         .from('pm_templates')
         .insert([{
           name: newTemplateName,
-          description: projectBrief.substring(0, 200),
+          description: offerText.substring(0, 200),
           tasks: editedTasks,
           project_type: null,
         }]);
@@ -236,7 +296,7 @@ export function PMHelper() {
 
   function loadFromGeneration(gen: Generation) {
     setProjectName(gen.project_name);
-    setProjectBrief(gen.project_brief || '');
+    setOfferText(gen.project_brief || '');
     setEditedTasks(gen.tasks);
     setResult({
       tasks: gen.tasks,
@@ -244,7 +304,6 @@ export function PMHelper() {
         total_tasks: gen.tasks.length,
         by_type: {},
         by_priority: {},
-        estimated_story_points: 0,
       },
       recommendations: [],
     });
@@ -259,7 +318,6 @@ export function PMHelper() {
         total_tasks: template.tasks.length,
         by_type: {},
         by_priority: {},
-        estimated_story_points: 0,
       },
       recommendations: [],
     });
@@ -278,6 +336,26 @@ export function PMHelper() {
     });
   }
 
+  function toggleTaskSelection(index: number) {
+    setSelectedTasks(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  }
+
+  function selectAllTasks() {
+    setSelectedTasks(new Set(editedTasks.map((_, i) => i)));
+  }
+
+  function deselectAllTasks() {
+    setSelectedTasks(new Set());
+  }
+
   function updateTask(index: number, updates: Partial<JiraTask>) {
     setEditedTasks(prev => {
       const next = [...prev];
@@ -288,18 +366,25 @@ export function PMHelper() {
 
   function removeTask(index: number) {
     setEditedTasks(prev => prev.filter((_, i) => i !== index));
+    setSelectedTasks(prev => {
+      const next = new Set<number>();
+      prev.forEach(i => {
+        if (i < index) next.add(i);
+        else if (i > index) next.add(i - 1);
+      });
+      return next;
+    });
   }
 
   function generateCSV(): string {
-    const headers = ['Summary', 'Description', 'Issue Type', 'Priority', 'Labels', 'Story Points', 'Acceptance Criteria'];
-    const rows = editedTasks.map(task => [
+    const headers = ['Summary', 'Description', 'Issue Type', 'Priority', 'Labels'];
+    const selectedTasksArray = editedTasks.filter((_, i) => selectedTasks.has(i));
+    const rows = selectedTasksArray.map(task => [
       task.summary,
       task.description,
       task.task_type,
       task.priority,
       task.labels.join(', '),
-      task.story_points?.toString() || '',
-      task.acceptance_criteria?.join('\n') || '',
     ]);
 
     const csvContent = [headers, ...rows]
@@ -310,6 +395,10 @@ export function PMHelper() {
   }
 
   function copyCSV() {
+    if (selectedTasks.size === 0) {
+      alert('Select at least one task to export');
+      return;
+    }
     const csv = generateCSV();
     navigator.clipboard.writeText(csv);
     setCopiedCSV(true);
@@ -317,6 +406,10 @@ export function PMHelper() {
   }
 
   function downloadCSV() {
+    if (selectedTasks.size === 0) {
+      alert('Select at least one task to export');
+      return;
+    }
     const csv = generateCSV();
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -327,11 +420,20 @@ export function PMHelper() {
     URL.revokeObjectURL(url);
   }
 
+  function resetForm() {
+    setOfferText('');
+    setAdditionalNotes('');
+    setFileName(null);
+    setResult(null);
+    setEditedTasks([]);
+    setSelectedTasks(new Set());
+    setProjectName('');
+  }
+
   const tabs = [
     { id: 'generate' as const, label: 'Generate', icon: Sparkles },
     { id: 'history' as const, label: 'History', icon: History },
     { id: 'templates' as const, label: 'Templates', icon: BookTemplate },
-    { id: 'reference' as const, label: 'Reference', icon: FolderSearch },
   ];
 
   return (
@@ -344,7 +446,7 @@ export function PMHelper() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">PM Helper</h1>
-            <p className="text-slate-600">Generate Jira-ready task breakdowns from project briefs</p>
+            <p className="text-slate-600">Upload offer, AI generates Jira tasks</p>
           </div>
         </div>
       </div>
@@ -373,72 +475,107 @@ export function PMHelper() {
           {/* Input Panel */}
           <div className="space-y-4">
             <Card className="p-6">
-              <h3 className="text-sm font-semibold text-slate-900 mb-4">Project Details</h3>
+              <h3 className="text-sm font-semibold text-slate-900 mb-4">Upload Offer</h3>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Project Name *
-                  </label>
-                  <Input
-                    value={projectName}
-                    onChange={setProjectName}
-                    placeholder="e.g., ACME Corp Website Redesign"
-                  />
+              {/* Language Selection */}
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">Output Language</label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setLanguage('en')}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      language === 'en'
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    onClick={() => setLanguage('sl')}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      language === 'sl'
+                        ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                        : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    Slovenian
+                  </button>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Project Brief *
-                  </label>
-                  <Textarea
-                    value={projectBrief}
-                    onChange={setProjectBrief}
-                    placeholder="Describe the project scope, goals, and requirements..."
-                    rows={6}
-                  />
+              {/* File Upload */}
+              <div
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-indigo-400 hover:bg-indigo-50/50 transition-colors cursor-pointer mb-4"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {parsing ? (
+                  <div className="flex flex-col items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-2" />
+                    <p className="text-slate-600">Parsing document...</p>
+                  </div>
+                ) : fileName ? (
+                  <div className="flex flex-col items-center">
+                    <FileText className="w-10 h-10 text-indigo-500 mb-2" />
+                    <p className="text-slate-900 font-medium">{fileName}</p>
+                    <p className="text-xs text-slate-500 mt-1">Click to replace</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                    <p className="text-slate-700 font-medium">Drop offer file here</p>
+                    <p className="text-sm text-slate-500">PDF, Word, or text</p>
+                  </>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt,.md"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleFileUpload(file);
+                  }}
+                  className="hidden"
+                />
+              </div>
+
+              {/* Or paste text */}
+              <div className="relative mb-4">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200" />
                 </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Scope Items (one per line)
-                  </label>
-                  <Textarea
-                    value={scopeItems}
-                    onChange={setScopeItems}
-                    placeholder="Homepage&#10;Product listing&#10;Product detail&#10;Contact form&#10;Blog"
-                    rows={4}
-                  />
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-white px-2 text-slate-500">or paste offer text</span>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Templates/Pages to Build (one per line)
-                  </label>
-                  <Textarea
-                    value={selectedTemplates}
-                    onChange={setSelectedTemplates}
-                    placeholder="Homepage&#10;Category page&#10;Product page&#10;About us&#10;Contact"
-                    rows={4}
-                  />
-                </div>
+              <Textarea
+                value={offerText}
+                onChange={setOfferText}
+                placeholder="Paste your offer/brief content here..."
+                rows={6}
+              />
 
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">
-                    Custom Instructions (optional)
-                  </label>
-                  <Textarea
-                    value={customInstructions}
-                    onChange={setCustomInstructions}
-                    placeholder="Any specific requirements or preferences..."
-                    rows={2}
-                  />
-                </div>
+              {/* Additional Notes */}
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Additional Notes (optional)
+                </label>
+                <Textarea
+                  value={additionalNotes}
+                  onChange={setAdditionalNotes}
+                  placeholder="Any extra instructions, focus areas, or context..."
+                  rows={3}
+                />
+              </div>
 
+              <div className="flex gap-2 mt-4">
                 <Button
                   onClick={generateTasks}
-                  disabled={loading || !projectName.trim() || !projectBrief.trim()}
-                  className="w-full"
+                  disabled={loading || !offerText.trim()}
+                  className="flex-1"
                 >
                   {loading ? (
                     <>
@@ -452,6 +589,11 @@ export function PMHelper() {
                     </>
                   )}
                 </Button>
+                {(offerText || result) && (
+                  <Button variant="secondary" onClick={resetForm}>
+                    Clear
+                  </Button>
+                )}
               </div>
             </Card>
           </div>
@@ -463,11 +605,16 @@ export function PMHelper() {
                 {/* Summary */}
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-sm font-semibold text-slate-900">Summary</h3>
+                    <div>
+                      <h3 className="text-sm font-semibold text-slate-900">Generated Tasks</h3>
+                      {result.detected_project_name && (
+                        <p className="text-xs text-slate-500 mt-1">Project: {result.detected_project_name}</p>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <Button variant="secondary" size="sm" onClick={() => setShowSaveTemplate(true)}>
                         <BookTemplate className="w-4 h-4" />
-                        Save as Template
+                        Template
                       </Button>
                       <Button variant="secondary" size="sm" onClick={saveGeneration}>
                         <Save className="w-4 h-4" />
@@ -476,10 +623,10 @@ export function PMHelper() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4 mb-4">
+                  <div className="grid grid-cols-3 gap-4 mb-4">
                     <div className="text-center p-3 bg-slate-50 rounded-lg">
                       <div className="text-2xl font-bold text-slate-900">{editedTasks.length}</div>
-                      <div className="text-xs text-slate-500">Tasks</div>
+                      <div className="text-xs text-slate-500">Total</div>
                     </div>
                     <div className="text-center p-3 bg-purple-50 rounded-lg">
                       <div className="text-2xl font-bold text-purple-700">
@@ -489,15 +636,9 @@ export function PMHelper() {
                     </div>
                     <div className="text-center p-3 bg-green-50 rounded-lg">
                       <div className="text-2xl font-bold text-green-700">
-                        {editedTasks.filter(t => t.task_type === 'Story').length}
+                        {editedTasks.filter(t => t.task_type === 'Story' || t.task_type === 'Task').length}
                       </div>
-                      <div className="text-xs text-slate-500">Stories</div>
-                    </div>
-                    <div className="text-center p-3 bg-blue-50 rounded-lg">
-                      <div className="text-2xl font-bold text-blue-700">
-                        {editedTasks.reduce((sum, t) => sum + (t.story_points || 0), 0)}
-                      </div>
-                      <div className="text-xs text-slate-500">Story Points</div>
+                      <div className="text-xs text-slate-500">Stories/Tasks</div>
                     </div>
                   </div>
 
@@ -536,7 +677,10 @@ export function PMHelper() {
                 {/* Export Actions */}
                 <Card className="p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-slate-700">Export for Jira</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-slate-700">Export for Jira</span>
+                      <span className="text-xs text-slate-500">({selectedTasks.size} selected)</span>
+                    </div>
                     <div className="flex gap-2">
                       <Button variant="secondary" size="sm" onClick={copyCSV}>
                         {copiedCSV ? (
@@ -561,43 +705,71 @@ export function PMHelper() {
 
                 {/* Task List */}
                 <Card className="p-4">
-                  <h3 className="text-sm font-semibold text-slate-900 mb-4">
-                    Tasks ({editedTasks.length})
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-sm font-semibold text-slate-900">
+                      Tasks ({editedTasks.length})
+                    </h3>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={selectAllTasks}
+                        className="text-xs text-indigo-600 hover:text-indigo-700"
+                      >
+                        Select all
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        onClick={deselectAllTasks}
+                        className="text-xs text-slate-500 hover:text-slate-700"
+                      >
+                        Deselect all
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="space-y-2 max-h-[600px] overflow-y-auto">
                     {editedTasks.map((task, index) => (
                       <div
                         key={index}
-                        className="border border-slate-200 rounded-lg overflow-hidden"
+                        className={`border rounded-lg overflow-hidden ${
+                          selectedTasks.has(index) ? 'border-indigo-300 bg-indigo-50/30' : 'border-slate-200'
+                        }`}
                       >
                         <div
                           className="flex items-center gap-3 p-3 bg-white cursor-pointer hover:bg-slate-50"
-                          onClick={() => toggleTaskExpansion(index)}
                         >
-                          {expandedTasks.has(index) ? (
-                            <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleTaskSelection(index); }}
+                            className="shrink-0"
+                          >
+                            {selectedTasks.has(index) ? (
+                              <CheckSquare className="w-5 h-5 text-indigo-600" />
+                            ) : (
+                              <Square className="w-5 h-5 text-slate-300" />
+                            )}
+                          </button>
 
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[task.task_type] || 'bg-slate-100'}`}>
-                            {task.task_type}
-                          </span>
+                          <div
+                            className="flex items-center gap-3 flex-1 min-w-0"
+                            onClick={() => toggleTaskExpansion(index)}
+                          >
+                            {expandedTasks.has(index) ? (
+                              <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                            )}
 
-                          <span className="flex-1 text-sm font-medium text-slate-900 truncate">
-                            {task.summary}
-                          </span>
-
-                          <span className={`px-2 py-0.5 rounded text-xs border ${PRIORITY_COLORS[task.priority] || 'bg-slate-100'}`}>
-                            {task.priority}
-                          </span>
-
-                          {task.story_points && (
-                            <span className="px-2 py-0.5 bg-slate-100 rounded text-xs font-medium text-slate-600">
-                              {task.story_points} SP
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${TYPE_COLORS[task.task_type] || 'bg-slate-100'}`}>
+                              {task.task_type}
                             </span>
-                          )}
+
+                            <span className="flex-1 text-sm font-medium text-slate-900 truncate">
+                              {task.summary}
+                            </span>
+
+                            <span className={`px-2 py-0.5 rounded text-xs border ${PRIORITY_COLORS[task.priority] || 'bg-slate-100'}`}>
+                              {task.priority}
+                            </span>
+                          </div>
 
                           <button
                             onClick={(e) => { e.stopPropagation(); removeTask(index); }}
@@ -622,11 +794,11 @@ export function PMHelper() {
                               <Textarea
                                 value={task.description}
                                 onChange={(value) => updateTask(index, { description: value })}
-                                rows={3}
+                                rows={4}
                               />
                             </div>
 
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-2 gap-3">
                               <div>
                                 <label className="block text-xs font-medium text-slate-500 mb-1">Type</label>
                                 <select
@@ -655,15 +827,6 @@ export function PMHelper() {
                                   <option value="Lowest">Lowest</option>
                                 </select>
                               </div>
-
-                              <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-1">Story Points</label>
-                                <Input
-                                  type="number"
-                                  value={task.story_points || ''}
-                                  onChange={(value) => updateTask(index, { story_points: parseInt(value) || undefined })}
-                                />
-                              </div>
                             </div>
 
                             <div>
@@ -673,17 +836,6 @@ export function PMHelper() {
                                 onChange={(value) => updateTask(index, { labels: value.split(',').map((l: string) => l.trim()).filter(Boolean) })}
                               />
                             </div>
-
-                            {task.acceptance_criteria && task.acceptance_criteria.length > 0 && (
-                              <div>
-                                <label className="block text-xs font-medium text-slate-500 mb-1">Acceptance Criteria</label>
-                                <Textarea
-                                  value={task.acceptance_criteria.join('\n')}
-                                  onChange={(value) => updateTask(index, { acceptance_criteria: value.split('\n').filter(Boolean) })}
-                                  rows={3}
-                                />
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -696,7 +848,7 @@ export function PMHelper() {
             {!result && !loading && (
               <Card className="p-12 text-center">
                 <ListTodo className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <p className="text-slate-500">Enter project details and click Generate to create tasks</p>
+                <p className="text-slate-500">Upload an offer or paste text to generate tasks</p>
               </Card>
             )}
 
@@ -704,7 +856,7 @@ export function PMHelper() {
               <Card className="p-12 text-center">
                 <LoadingSpinner />
                 <p className="text-slate-700 font-medium">Generating tasks...</p>
-                <p className="text-sm text-slate-500">AI is creating your project breakdown</p>
+                <p className="text-sm text-slate-500">AI is analyzing your offer</p>
               </Card>
             )}
           </div>
@@ -795,15 +947,6 @@ export function PMHelper() {
             </div>
           )}
         </div>
-      )}
-
-      {/* Reference Tab */}
-      {activeTab === 'reference' && (
-        <Card className="p-12 text-center">
-          <FolderSearch className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-          <p className="text-slate-500">Reference projects feature coming soon</p>
-          <p className="text-sm text-slate-400 mt-1">This will show tasks from completed projects for reference</p>
-        </Card>
       )}
     </div>
   );
