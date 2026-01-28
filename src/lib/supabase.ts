@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { Project, ProfileHours, ScopeItem, ExternalCost, ChangeRequest, ProjectWithDetails, ProjectMetrics } from '../types';
+import type { Project, ProfileHours, ScopeItem, ExternalCost, ChangeRequest, ChangeRequestHours, ProjectWithDetails, ProjectMetrics } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -9,13 +9,23 @@ export const supabase = createClient(supabaseUrl, supabaseKey);
 // Internal hourly cost for calculations (configurable)
 export const INTERNAL_HOURLY_COST = 30;
 
+// Target margin range for project success (50-55%)
+export const TARGET_MARGIN_MIN = 50;
+export const TARGET_MARGIN_MAX = 55;
+
 // Calculate project metrics
 export function calculateMetrics(project: ProjectWithDetails): ProjectMetrics {
   const changeRequestsTotal = project.change_requests?.reduce((sum, cr) => sum + cr.amount, 0) || 0;
   const totalValue = project.offer_value + changeRequestsTotal;
 
   const estimatedHours = project.profile_hours?.reduce((sum, ph) => sum + ph.estimated_hours, 0) || 0;
-  const actualHours = project.profile_hours?.reduce((sum, ph) => sum + ph.actual_hours, 0) || 0;
+  const baseActualHours = project.profile_hours?.reduce((sum, ph) => sum + ph.actual_hours, 0) || 0;
+
+  // Add CR hours to actual hours total
+  const crHours = project.change_requests?.reduce((sum, cr) =>
+    sum + (cr.hours?.reduce((s, h) => s + h.actual_hours, 0) || 0), 0) || 0;
+  const actualHours = baseActualHours + crHours;
+
   const hoursVariance = actualHours - estimatedHours;
   const hoursVariancePercent = estimatedHours > 0 ? (hoursVariance / estimatedHours) * 100 : 0;
 
@@ -40,12 +50,21 @@ export function calculateMetrics(project: ProjectWithDetails): ProjectMetrics {
   const estimatedHourlyRate = estimatedHours > 0 ? netValueForHours / estimatedHours : 0;
   const actualHourlyRate = actualHours > 0 ? (totalValue - actualExternalCost) / actualHours : 0;
 
-  // Determine health
+  // Determine health based on actual margin target (50-55%)
   let health: 'on-track' | 'at-risk' | 'over-budget' = 'on-track';
-  if (hoursVariancePercent > 20 || marginDelta < -10) {
-    health = 'over-budget';
-  } else if (hoursVariancePercent > 10 || marginDelta < -5) {
-    health = 'at-risk';
+  if (actualHours > 0) {
+    // Only evaluate health for projects with logged hours
+    if (actualMargin >= TARGET_MARGIN_MIN && actualMargin <= TARGET_MARGIN_MAX) {
+      health = 'on-track'; // Hit the target range
+    } else if (actualMargin >= TARGET_MARGIN_MIN - 5 && actualMargin < TARGET_MARGIN_MIN) {
+      health = 'at-risk'; // Close to target but below (45-50%)
+    } else if (actualMargin > TARGET_MARGIN_MAX && actualMargin <= TARGET_MARGIN_MAX + 10) {
+      health = 'on-track'; // Above target is also good (55-65%)
+    } else if (actualMargin < TARGET_MARGIN_MIN - 5) {
+      health = 'over-budget'; // Below 45% margin
+    } else {
+      health = 'on-track'; // Very high margin (>65%) is fine
+    }
   }
 
   return {
@@ -103,12 +122,35 @@ export async function fetchProjectWithDetails(id: string): Promise<ProjectWithDe
     supabase.from('change_requests').select('*').eq('project_id', id).order('created_at', { ascending: true }),
   ]);
 
+  // Fetch CR hours for each change request
+  const crIds = (change_requests || []).map((cr: ChangeRequest) => cr.id);
+  let crHoursMap: Record<string, ChangeRequestHours[]> = {};
+
+  if (crIds.length > 0) {
+    const { data: cr_hours } = await supabase
+      .from('change_request_hours')
+      .select('*')
+      .in('change_request_id', crIds);
+
+    for (const crh of cr_hours || []) {
+      if (!crHoursMap[crh.change_request_id]) {
+        crHoursMap[crh.change_request_id] = [];
+      }
+      crHoursMap[crh.change_request_id].push(crh);
+    }
+  }
+
+  const changeRequestsWithHours = (change_requests || []).map((cr: ChangeRequest) => ({
+    ...cr,
+    hours: crHoursMap[cr.id] || [],
+  }));
+
   return {
     ...project,
     profile_hours: profile_hours || [],
     scope_items: scope_items || [],
     external_costs: external_costs || [],
-    change_requests: change_requests || [],
+    change_requests: changeRequestsWithHours,
   };
 }
 
@@ -232,7 +274,29 @@ export async function updateChangeRequest(id: string, updates: Partial<ChangeReq
 }
 
 export async function deleteChangeRequest(id: string): Promise<void> {
+  // Delete associated hours first
+  await supabase.from('change_request_hours').delete().eq('change_request_id', id);
   await supabase.from('change_requests').delete().eq('id', id);
+}
+
+// Change Request Hours CRUD
+export async function createChangeRequestHours(changeRequestId: string, hours: Partial<ChangeRequestHours>): Promise<ChangeRequestHours> {
+  const { data, error } = await supabase
+    .from('change_request_hours')
+    .insert([{ ...hours, change_request_id: changeRequestId }])
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function updateChangeRequestHours(id: string, updates: Partial<ChangeRequestHours>): Promise<void> {
+  await supabase.from('change_request_hours').update(updates).eq('id', id);
+}
+
+export async function deleteChangeRequestHours(id: string): Promise<void> {
+  await supabase.from('change_request_hours').delete().eq('id', id);
 }
 
 // Fetch all projects with metrics for list view

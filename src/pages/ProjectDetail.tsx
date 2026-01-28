@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, X, Plus, Trash2, FileDown } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   Button, Input, Textarea, Select, Checkbox, Card, CardHeader,
   StatusBadge, LoadingSpinner, Variance, StatCard
@@ -10,6 +10,7 @@ import {
   createScopeItem, updateScopeItem, deleteScopeItem,
   createExternalCost, updateExternalCost, deleteExternalCost,
   createChangeRequest, updateChangeRequest, deleteChangeRequest,
+  createChangeRequestHours, updateChangeRequestHours, deleteChangeRequestHours,
   calculateMetrics, supabase
 } from '../lib/supabase';
 import { exportProjectPDF } from '../lib/export';
@@ -66,6 +67,7 @@ export function ProjectDetail() {
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
   const [externalCosts, setExternalCosts] = useState<ExternalCost[]>([]);
   const [changeRequests, setChangeRequests] = useState<ChangeRequest[]>([]);
+  const [expandedCRs, setExpandedCRs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (id) loadProject();
@@ -118,7 +120,26 @@ export function ProjectDetail() {
     setProfileHours(allProfileHours);
     setScopeItems(data.scope_items);
     setExternalCosts(data.external_costs);
-    setChangeRequests(data.change_requests);
+
+    // Ensure each CR has hours for all profiles
+    const crsWithAllHours = data.change_requests.map(cr => {
+      const existingHours = cr.hours || [];
+      const existingProfiles = new Set(existingHours.map(h => h.profile));
+      const allHours = [...existingHours];
+      for (const profile of PROFILE_LIST) {
+        if (!existingProfiles.has(profile)) {
+          allHours.push({
+            id: `new-${profile}-${cr.id}`,
+            change_request_id: cr.id,
+            profile,
+            actual_hours: 0,
+          });
+        }
+      }
+      return { ...cr, hours: allHours };
+    });
+    setChangeRequests(crsWithAllHours);
+    setExpandedCRs(new Set());
   }
 
   async function handleSave() {
@@ -187,16 +208,37 @@ export function ProjectDetail() {
       }
 
       for (const cr of changeRequests) {
+        let crId = cr.id;
         if (cr.id.startsWith('new-')) {
-          await createChangeRequest(project.id, {
+          const newCR = await createChangeRequest(project.id, {
             description: cr.description,
             amount: cr.amount,
           });
+          crId = newCR.id;
         } else {
           await updateChangeRequest(cr.id, {
             description: cr.description,
             amount: cr.amount,
           });
+        }
+
+        // Save CR hours
+        for (const crh of cr.hours || []) {
+          if (crh.actual_hours > 0) {
+            if (crh.id.startsWith('new-')) {
+              await createChangeRequestHours(crId, {
+                profile: crh.profile,
+                actual_hours: crh.actual_hours,
+              });
+            } else {
+              await updateChangeRequestHours(crh.id, {
+                actual_hours: crh.actual_hours,
+              });
+            }
+          } else if (!crh.id.startsWith('new-')) {
+            // Delete hours entry if it exists and is now 0
+            await deleteChangeRequestHours(crh.id);
+          }
         }
       }
 
@@ -251,13 +293,53 @@ export function ProjectDetail() {
 
   function addChangeRequest() {
     if (!project) return;
+    const newCrId = `new-${Date.now()}`;
     setChangeRequests([...changeRequests, {
-      id: `new-${Date.now()}`,
+      id: newCrId,
       project_id: project.id,
       description: '',
       amount: 0,
       created_at: new Date().toISOString(),
+      hours: PROFILE_LIST.map(profile => ({
+        id: `new-${profile}-${Date.now()}`,
+        change_request_id: newCrId,
+        profile,
+        actual_hours: 0,
+      })),
     }]);
+  }
+
+  function toggleCRExpanded(crId: string) {
+    const newExpanded = new Set(expandedCRs);
+    if (newExpanded.has(crId)) {
+      newExpanded.delete(crId);
+    } else {
+      newExpanded.add(crId);
+    }
+    setExpandedCRs(newExpanded);
+  }
+
+  function updateCRHours(crId: string, profile: Profile, hours: number) {
+    setChangeRequests(changeRequests.map(cr => {
+      if (cr.id !== crId) return cr;
+      const existingHours = cr.hours || [];
+      const hourIndex = existingHours.findIndex(h => h.profile === profile);
+      if (hourIndex >= 0) {
+        const updatedHours = [...existingHours];
+        updatedHours[hourIndex] = { ...updatedHours[hourIndex], actual_hours: hours };
+        return { ...cr, hours: updatedHours };
+      } else {
+        return {
+          ...cr,
+          hours: [...existingHours, {
+            id: `new-${profile}-${Date.now()}`,
+            change_request_id: crId,
+            profile,
+            actual_hours: hours,
+          }],
+        };
+      }
+    }));
   }
 
   function removeChangeRequest(crId: string) {
@@ -579,48 +661,105 @@ export function ProjectDetail() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Description</th>
+                    <th className="px-2 py-3 w-8"></th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Description</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Amount</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Hours</th>
                     {editMode && <th className="px-4 py-3 w-10"></th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {changeRequests.map((cr) => (
-                    <tr key={cr.id} className="border-b border-slate-100">
-                      <td className="px-6 py-3">
-                        {editMode ? (
-                          <input type="text" value={cr.description} placeholder="Description..."
-                            onChange={(e) => setChangeRequests(changeRequests.map(c => c.id === cr.id ? { ...c, description: e.target.value } : c))}
-                            className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
-                          />
-                        ) : (
-                          <span className="text-sm text-slate-700">{cr.description}</span>
+                  {changeRequests.map((cr) => {
+                    const crHoursTotal = (cr.hours || []).reduce((sum, h) => sum + h.actual_hours, 0);
+                    const isExpanded = expandedCRs.has(cr.id);
+                    return (
+                      <>
+                        <tr key={cr.id} className="border-b border-slate-100">
+                          <td className="px-2 py-3">
+                            <button
+                              onClick={() => toggleCRExpanded(cr.id)}
+                              className="text-slate-400 hover:text-slate-600"
+                            >
+                              {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                            </button>
+                          </td>
+                          <td className="px-4 py-3">
+                            {editMode ? (
+                              <input type="text" value={cr.description} placeholder="Description..."
+                                onChange={(e) => setChangeRequests(changeRequests.map(c => c.id === cr.id ? { ...c, description: e.target.value } : c))}
+                                className="w-full px-2 py-1 border border-slate-200 rounded text-sm"
+                              />
+                            ) : (
+                              <span className="text-sm text-slate-700">{cr.description}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            {editMode ? (
+                              <input type="number" value={cr.amount}
+                                onChange={(e) => setChangeRequests(changeRequests.map(c => c.id === cr.id ? { ...c, amount: Number(e.target.value) } : c))}
+                                className="w-28 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                              />
+                            ) : (
+                              <span className="text-sm font-semibold text-emerald-500">+€{cr.amount.toLocaleString()}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={`text-sm font-medium ${crHoursTotal > 0 ? 'text-slate-900' : 'text-slate-400'}`}>
+                              {crHoursTotal}h
+                            </span>
+                          </td>
+                          {editMode && (
+                            <td className="px-4 py-3">
+                              <button onClick={() => removeChangeRequest(cr.id)} className="text-slate-400 hover:text-red-500">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                        {isExpanded && (
+                          <tr key={`${cr.id}-hours`} className="bg-slate-50 border-b border-slate-100">
+                            <td colSpan={editMode ? 5 : 4} className="px-4 py-3">
+                              <div className="pl-6">
+                                <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Hours by Profile</div>
+                                <div className="grid grid-cols-7 gap-2">
+                                  {PROFILE_LIST.map(profile => {
+                                    const profileHour = (cr.hours || []).find(h => h.profile === profile);
+                                    const hours = profileHour?.actual_hours || 0;
+                                    return (
+                                      <div key={profile} className="text-center">
+                                        <div className="text-xs text-slate-500 mb-1">{profile}</div>
+                                        {editMode ? (
+                                          <input
+                                            type="number"
+                                            value={hours}
+                                            onChange={(e) => updateCRHours(cr.id, profile, Number(e.target.value))}
+                                            className="w-full px-1 py-1 border border-slate-200 rounded text-center text-sm"
+                                          />
+                                        ) : (
+                                          <span className={`text-sm font-medium ${hours > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
+                                            {hours}h
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {editMode ? (
-                          <input type="number" value={cr.amount}
-                            onChange={(e) => setChangeRequests(changeRequests.map(c => c.id === cr.id ? { ...c, amount: Number(e.target.value) } : c))}
-                            className="w-28 px-2 py-1 border border-slate-200 rounded text-sm text-right"
-                          />
-                        ) : (
-                          <span className="text-sm font-semibold text-emerald-500">+€{cr.amount.toLocaleString()}</span>
-                        )}
-                      </td>
-                      {editMode && (
-                        <td className="px-4 py-3">
-                          <button onClick={() => removeChangeRequest(cr.id)} className="text-slate-400 hover:text-red-500">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                      </>
+                    );
+                  })}
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50 border-t-2 border-slate-200">
-                    <td className="px-6 py-3 font-bold text-slate-900">Total CRs</td>
+                    <td className="px-2 py-3"></td>
+                    <td className="px-4 py-3 font-bold text-slate-900">Total CRs</td>
                     <td className="px-4 py-3 text-right font-bold text-emerald-500">+€{crTotal.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-900">
+                      {changeRequests.reduce((sum, cr) => sum + (cr.hours || []).reduce((s, h) => s + h.actual_hours, 0), 0)}h
+                    </td>
                     {editMode && <td className="px-4 py-3"></td>}
                   </tr>
                 </tfoot>

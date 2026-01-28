@@ -4,7 +4,7 @@ import { FileDown } from 'lucide-react';
 import {
   Button, StatCard, Card, LoadingSpinner, Variance
 } from '../components/ui';
-import { fetchAnalyticsData } from '../lib/supabase';
+import { fetchAnalyticsData, TARGET_MARGIN_MIN, TARGET_MARGIN_MAX } from '../lib/supabase';
 import { exportAnalyticsExcel } from '../lib/export';
 import type { ProjectWithDetails, ProjectMetrics } from '../types';
 import {
@@ -76,6 +76,20 @@ export function Analytics() {
     { range: '>20%', count: data.projects.filter(p => p.metrics.hoursVariancePercent >= 20).length, color: '#ef4444' },
   ];
 
+  // Margin distribution based on target (50-55%)
+  const projectsWithHours = data.projects.filter(p => p.metrics.actualHours > 0);
+  const marginDistribution = [
+    { range: '<45%', count: projectsWithHours.filter(p => p.metrics.actualMargin < 45).length, color: '#ef4444', label: 'Below Target' },
+    { range: '45-50%', count: projectsWithHours.filter(p => p.metrics.actualMargin >= 45 && p.metrics.actualMargin < 50).length, color: '#f59e0b', label: 'Near Target' },
+    { range: '50-55%', count: projectsWithHours.filter(p => p.metrics.actualMargin >= TARGET_MARGIN_MIN && p.metrics.actualMargin <= TARGET_MARGIN_MAX).length, color: '#10b981', label: 'On Target' },
+    { range: '>55%', count: projectsWithHours.filter(p => p.metrics.actualMargin > TARGET_MARGIN_MAX).length, color: '#3b82f6', label: 'Above Target' },
+  ];
+
+  const onTargetProjects = projectsWithHours.filter(p => p.metrics.actualMargin >= TARGET_MARGIN_MIN && p.metrics.actualMargin <= TARGET_MARGIN_MAX).length;
+  const aboveTargetProjects = projectsWithHours.filter(p => p.metrics.actualMargin > TARGET_MARGIN_MAX).length;
+  const successRate = projectsWithHours.length > 0 ? ((onTargetProjects + aboveTargetProjects) / projectsWithHours.length) * 100 : 0;
+  const avgActualMargin = projectsWithHours.length > 0 ? projectsWithHours.reduce((sum, p) => sum + p.metrics.actualMargin, 0) / projectsWithHours.length : 0;
+
   // Scope creep projects
   const scopeCreepProjects = data.projects.filter(p => p.scope_creep && p.scope_creep_notes);
 
@@ -125,12 +139,14 @@ export function Analytics() {
             <StatCard label="Total Projects" value={data.totalProjects} subtext={`${data.activeProjects} active`} />
             <StatCard label="Total Revenue" value={`€${(data.totalRevenue / 1000).toFixed(0)}k`} subtext="All projects" />
             <StatCard
-              label="Avg Hours Variance"
-              value={`${data.avgHoursVariance >= 0 ? '+' : ''}${data.avgHoursVariance.toFixed(0)}%`}
+              label="Success Rate"
+              value={`${successRate.toFixed(0)}%`}
+              subtext={`${onTargetProjects + aboveTargetProjects} of ${projectsWithHours.length} projects ≥50%`}
             />
             <StatCard
-              label="Avg Margin Delta"
-              value={`${data.avgMarginDelta >= 0 ? '+' : ''}${data.avgMarginDelta.toFixed(1)}%`}
+              label="Avg Actual Margin"
+              value={`${avgActualMargin.toFixed(0)}%`}
+              subtext={`Target: ${TARGET_MARGIN_MIN}-${TARGET_MARGIN_MAX}%`}
             />
             <StatCard
               label="Scope Creep Rate"
@@ -139,23 +155,29 @@ export function Analytics() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            {/* Hours Variance Distribution */}
+          <div className="grid grid-cols-2 gap-6 mb-6">
+            {/* Margin Distribution */}
             <Card>
-              <h3 className="text-sm font-semibold text-slate-900 mb-5">Hours Variance Distribution</h3>
+              <h3 className="text-sm font-semibold text-slate-900 mb-5">Actual Margin Distribution (Target: 50-55%)</h3>
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={varianceDistribution}>
+                <BarChart data={marginDistribution}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="range" tick={{ fontSize: 12 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
                   <Tooltip />
                   <Bar dataKey="count" name="Projects">
-                    {varianceDistribution.map((entry, index) => (
+                    {marginDistribution.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              <div className="flex gap-4 mt-3 text-xs">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500"></span> Below 45%</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-500"></span> 45-50%</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-emerald-500"></span> 50-55% (Target)</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-500"></span> Above 55%</span>
+              </div>
             </Card>
 
             {/* Profile Comparison */}
@@ -174,6 +196,24 @@ export function Analytics() {
               </ResponsiveContainer>
             </Card>
           </div>
+
+          {/* Hours Variance Distribution */}
+          <Card>
+            <h3 className="text-sm font-semibold text-slate-900 mb-5">Hours Variance Distribution</h3>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={varianceDistribution}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="range" tick={{ fontSize: 12 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                <Tooltip />
+                <Bar dataKey="count" name="Projects">
+                  {varianceDistribution.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
         </>
       )}
 
@@ -287,9 +327,11 @@ export function Analytics() {
                     </td>
                     <td className="px-4 py-4 text-right">
                       <span className={`font-semibold text-sm ${
-                        project.metrics.actualMargin >= project.metrics.estimatedMargin
+                        project.metrics.actualMargin >= TARGET_MARGIN_MIN
                           ? 'text-emerald-500'
-                          : 'text-red-500'
+                          : project.metrics.actualMargin >= 45
+                            ? 'text-amber-500'
+                            : 'text-red-500'
                       }`}>
                         {project.metrics.actualMargin.toFixed(0)}%
                       </span>

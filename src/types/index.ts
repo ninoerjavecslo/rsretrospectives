@@ -55,6 +55,14 @@ export interface ChangeRequest {
   description: string;
   amount: number;
   created_at: string;
+  hours?: ChangeRequestHours[];
+}
+
+export interface ChangeRequestHours {
+  id: string;
+  change_request_id: string;
+  profile: Profile;
+  actual_hours: number;
 }
 
 export type Profile = 'UX' | 'UI' | 'DESIGN' | 'DEV' | 'PM' | 'CONTENT' | 'ANALYTICS';
