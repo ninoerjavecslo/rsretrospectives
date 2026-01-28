@@ -4,12 +4,14 @@ import { Plus, FileDown } from 'lucide-react';
 import { Button, HealthBadge, StatusBadge, LoadingSpinner, Card, MarginDisplay, Variance } from '../components/ui';
 import { fetchProjectsWithMetrics, createProject } from '../lib/supabase';
 import { exportProjectsExcel } from '../lib/export';
+import { useEdit } from '../context/EditContext';
 import type { ProjectWithDetails, ProjectMetrics } from '../types';
 
 type ProjectWithMetrics = ProjectWithDetails & { metrics: ProjectMetrics };
 
 export function Projects() {
   const navigate = useNavigate();
+  const { canEdit } = useEdit();
   const [projects, setProjects] = useState<ProjectWithMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed' | 'draft'>('all');
@@ -64,10 +66,12 @@ export function Projects() {
             <FileDown className="w-4 h-4" />
             Export Excel
           </Button>
-          <Button onClick={handleCreateProject}>
-            <Plus className="w-4 h-4" />
-            Add Project
-          </Button>
+          {canEdit && (
+            <Button onClick={handleCreateProject}>
+              <Plus className="w-4 h-4" />
+              Add Project
+            </Button>
+          )}
         </div>
       </div>
 

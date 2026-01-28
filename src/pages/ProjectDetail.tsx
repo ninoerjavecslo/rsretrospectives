@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight, Upload, FileText } from 'lucide-react';
+import { ArrowLeft, Save, X, Plus, Trash2, FileDown, ChevronDown, ChevronRight, Upload, FileText, Lock } from 'lucide-react';
+import { useEdit } from '../context/EditContext';
 import {
   Button, Input, Textarea, Select, Checkbox, Card, CardHeader,
   StatusBadge, LoadingSpinner, Variance, StatCard
@@ -56,7 +57,8 @@ function OutcomeBadge({ outcome }: { outcome: ProjectOutcome | null }) {
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  
+  const { canEdit } = useEdit();
+
   const [project, setProject] = useState<ProjectWithDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -427,7 +429,13 @@ export function ProjectDetail() {
           {!editMode ? (
             <>
               <Button variant="secondary" onClick={() => exportProjectPDF(displayProject, metrics)}><FileDown className="w-4 h-4" /> Export PDF</Button>
-              <Button onClick={() => setEditMode(true)}>Edit Project</Button>
+              {canEdit ? (
+                <Button onClick={() => setEditMode(true)}>Edit Project</Button>
+              ) : (
+                <span className="flex items-center gap-1.5 text-sm text-slate-400 px-3">
+                  <Lock className="w-4 h-4" /> View Only
+                </span>
+              )}
             </>
           ) : (
             <>
@@ -1063,12 +1071,14 @@ export function ProjectDetail() {
           </Card>
 
           {/* Danger Zone */}
-          <Card className="border-red-200 bg-red-50">
-            <CardHeader title="Danger Zone" />
-            <Button variant="danger" size="sm" onClick={handleDelete}>
-              <Trash2 className="w-4 h-4" /> Delete Project
-            </Button>
-          </Card>
+          {canEdit && (
+            <Card className="border-red-200 bg-red-50">
+              <CardHeader title="Danger Zone" />
+              <Button variant="danger" size="sm" onClick={handleDelete}>
+                <Trash2 className="w-4 h-4" /> Delete Project
+              </Button>
+            </Card>
+          )}
         </div>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Send, ThumbsUp, ThumbsDown, Loader2, Trash2, MessageSquare } from 'lucide-react';
-import { Button, Card, LoadingSpinner } from '../components/ui';
+import { Button, LoadingSpinner } from '../components/ui';
 import { fetchProjectsWithMetrics, supabase } from '../lib/supabase';
 import type { ProjectWithDetails, ProjectMetrics, AIMessage, AIConversation } from '../types';
 import ReactMarkdown from 'react-markdown';

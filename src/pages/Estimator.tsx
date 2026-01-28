@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Calculator, Upload, FileText, AlertTriangle, TrendingUp, X, ThumbsUp, ThumbsDown } from 'lucide-react';
 import { Button, Card, Input, Textarea, Select, LoadingSpinner } from '../components/ui';
 import { fetchProjectsWithMetrics, fetchAnalyticsData, supabase, TARGET_MARGIN_MIN, INTERNAL_HOURLY_COST } from '../lib/supabase';
-import type { ProjectWithDetails, ProjectMetrics, AIEstimateInput, AIEstimateResult, Profile } from '../types';
+import type { Profile } from '../types';
 
 const PROJECT_TYPES = [
   { value: '', label: 'Select type...' },
