@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileDown } from 'lucide-react';
-import { 
+import {
   Button, StatCard, Card, LoadingSpinner, Variance
 } from '../components/ui';
 import { fetchAnalyticsData } from '../lib/supabase';
 import type { ProjectWithDetails, ProjectMetrics } from '../types';
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  Cell, Legend 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Cell, Legend
 } from 'recharts';
 
 type AnalyticsData = {
@@ -26,7 +26,7 @@ export function Analytics() {
   const navigate = useNavigate();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'overall' | 'projects' | 'team'>('overall');
+  const [activeTab, setActiveTab] = useState<'overall' | 'projects' | 'insights'>('overall');
 
   useEffect(() => {
     loadData();
@@ -75,6 +75,13 @@ export function Analytics() {
     { range: '>20%', count: data.projects.filter(p => p.metrics.hoursVariancePercent >= 20).length, color: '#ef4444' },
   ];
 
+  // Scope creep projects
+  const scopeCreepProjects = data.projects.filter(p => p.scope_creep && p.scope_creep_notes);
+
+  // Best went_well and went_wrong insights
+  const projectsWithWentWell = data.projects.filter(p => p.went_well);
+  const projectsWithWentWrong = data.projects.filter(p => p.went_wrong);
+
   return (
     <div className="p-8">
       {/* Header */}
@@ -94,7 +101,7 @@ export function Analytics() {
         {[
           { id: 'overall', label: 'Overall' },
           { id: 'projects', label: 'By Project' },
-          { id: 'team', label: 'By Team' },
+          { id: 'insights', label: 'Insights' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -116,16 +123,16 @@ export function Analytics() {
           <div className="flex gap-4 mb-6">
             <StatCard label="Total Projects" value={data.totalProjects} subtext={`${data.activeProjects} active`} />
             <StatCard label="Total Revenue" value={`€${(data.totalRevenue / 1000).toFixed(0)}k`} subtext="All projects" />
-            <StatCard 
-              label="Avg Hours Variance" 
+            <StatCard
+              label="Avg Hours Variance"
               value={`${data.avgHoursVariance >= 0 ? '+' : ''}${data.avgHoursVariance.toFixed(0)}%`}
             />
-            <StatCard 
-              label="Avg Margin Delta" 
+            <StatCard
+              label="Avg Margin Delta"
               value={`${data.avgMarginDelta >= 0 ? '+' : ''}${data.avgMarginDelta.toFixed(1)}%`}
             />
-            <StatCard 
-              label="Scope Creep Rate" 
+            <StatCard
+              label="Scope Creep Rate"
               value={`${data.scopeCreepRate.toFixed(0)}%`}
               subtext={`${data.projects.filter(p => p.scope_creep).length} of ${data.totalProjects} projects`}
             />
@@ -169,56 +176,76 @@ export function Analytics() {
         </>
       )}
 
-      {/* By Team Tab */}
-      {activeTab === 'team' && (
-        <div className="grid grid-cols-3 gap-4">
-          {profileChartData.map((item) => {
-            const isWarning = item.variance > 10 && item.variance <= 20;
-            const isBad = item.variance > 20;
-            
-            let status = 'Good';
-            let borderColor = 'border-l-emerald-500';
-            let badgeColor = 'bg-emerald-100 text-emerald-600';
-            let valueColor = 'text-emerald-500';
-            
-            if (item.variance < -5) {
-              status = 'Excellent';
-            } else if (isWarning) {
-              status = 'Needs Improvement';
-              borderColor = 'border-l-amber-500';
-              badgeColor = 'bg-amber-100 text-amber-600';
-              valueColor = 'text-amber-500';
-            } else if (isBad) {
-              status = 'Poor';
-              borderColor = 'border-l-red-500';
-              badgeColor = 'bg-red-100 text-red-600';
-              valueColor = 'text-red-500';
-            }
+      {/* Insights Tab */}
+      {activeTab === 'insights' && (
+        <div className="space-y-6">
+          {/* Scope Creep Summary */}
+          <Card>
+            <h3 className="text-sm font-semibold text-slate-900 mb-4">Scope Creep Issues</h3>
+            {scopeCreepProjects.length === 0 ? (
+              <p className="text-sm text-slate-400">No scope creep recorded</p>
+            ) : (
+              <div className="space-y-3">
+                {scopeCreepProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:bg-red-100"
+                    onClick={() => navigate(`/projects/${project.id}`)}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-sm text-slate-900">{project.name}</span>
+                      <span className="text-xs text-slate-400">{project.client}</span>
+                    </div>
+                    <p className="text-sm text-red-700">{project.scope_creep_notes}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
 
-            return (
-              <Card key={item.profile} className={`border-l-4 ${borderColor}`}>
-                <div className="flex justify-between items-start mb-3">
-                  <span className="text-lg font-bold text-slate-900">{item.profile}</span>
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded ${badgeColor}`}>
-                    {status}
-                  </span>
+          <div className="grid grid-cols-2 gap-6">
+            {/* What Went Well */}
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-900 mb-4">What Went Well</h3>
+              {projectsWithWentWell.length === 0 ? (
+                <p className="text-sm text-slate-400">No feedback recorded</p>
+              ) : (
+                <div className="space-y-3">
+                  {projectsWithWentWell.slice(0, 5).map((project) => (
+                    <div
+                      key={project.id}
+                      className="p-3 bg-emerald-50 border border-emerald-100 rounded-lg cursor-pointer hover:bg-emerald-100"
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                    >
+                      <div className="font-medium text-sm text-slate-900 mb-1">{project.name}</div>
+                      <p className="text-sm text-emerald-700">{project.went_well}</p>
+                    </div>
+                  ))}
                 </div>
-                <div className="space-y-1 mb-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Estimated</span>
-                    <span className="font-medium">{item.estimated}h</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-slate-500">Actual</span>
-                    <span className="font-medium">{item.actual}h</span>
-                  </div>
+              )}
+            </Card>
+
+            {/* What Went Wrong */}
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-900 mb-4">What Went Wrong</h3>
+              {projectsWithWentWrong.length === 0 ? (
+                <p className="text-sm text-slate-400">No feedback recorded</p>
+              ) : (
+                <div className="space-y-3">
+                  {projectsWithWentWrong.slice(0, 5).map((project) => (
+                    <div
+                      key={project.id}
+                      className="p-3 bg-amber-50 border border-amber-100 rounded-lg cursor-pointer hover:bg-amber-100"
+                      onClick={() => navigate(`/projects/${project.id}`)}
+                    >
+                      <div className="font-medium text-sm text-slate-900 mb-1">{project.name}</div>
+                      <p className="text-sm text-amber-700">{project.went_wrong}</p>
+                    </div>
+                  ))}
                 </div>
-                <div className={`text-2xl font-bold ${valueColor}`}>
-                  {item.variance >= 0 ? '+' : ''}{item.variance.toFixed(0)}%
-                </div>
-              </Card>
-            );
-          })}
+              )}
+            </Card>
+          </div>
         </div>
       )}
 
@@ -239,8 +266,8 @@ export function Analytics() {
               </thead>
               <tbody>
                 {data.projects.map((project) => (
-                  <tr 
-                    key={project.id} 
+                  <tr
+                    key={project.id}
                     className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer"
                     onClick={() => navigate(`/projects/${project.id}`)}
                   >
@@ -259,8 +286,8 @@ export function Analytics() {
                     </td>
                     <td className="px-4 py-4 text-right">
                       <span className={`font-semibold text-sm ${
-                        project.metrics.actualMargin >= project.metrics.estimatedMargin 
-                          ? 'text-emerald-500' 
+                        project.metrics.actualMargin >= project.metrics.estimatedMargin
+                          ? 'text-emerald-500'
                           : 'text-red-500'
                       }`}>
                         {project.metrics.actualMargin.toFixed(0)}%
@@ -284,13 +311,158 @@ export function Analytics() {
   );
 }
 
-// Team Performance page - just redirects to Analytics with team tab
+// Team Performance page - detailed role analysis
 export function TeamPerformance() {
-  const navigate = useNavigate();
-  
-  useEffect(() => {
-    navigate('/analytics', { replace: true });
-  }, [navigate]);
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  return null;
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  async function loadData() {
+    try {
+      const analytics = await fetchAnalyticsData();
+      setData(analytics);
+    } catch (error) {
+      console.error('Error loading analytics:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="p-8 text-center text-slate-400">
+        Error loading team data
+      </div>
+    );
+  }
+
+  // Calculate detailed profile stats
+  const profileDetails = Object.entries(data.profileStats).map(([profile, stats]) => {
+    const variance = stats.estimated > 0 ? ((stats.actual - stats.estimated) / stats.estimated) * 100 : 0;
+    const avgMistake = stats.estimated > 0 ? Math.abs(stats.actual - stats.estimated) / data.projects.length : 0;
+
+    // Count how many projects this profile was accurate (within 10%)
+    let accurateProjects = 0;
+    let totalProjectsWithProfile = 0;
+    let marginImpact = 0;
+
+    for (const project of data.projects) {
+      const profileHour = project.profile_hours.find(ph => ph.profile === profile);
+      if (profileHour && (profileHour.estimated_hours > 0 || profileHour.actual_hours > 0)) {
+        totalProjectsWithProfile++;
+        const projectVariance = profileHour.estimated_hours > 0
+          ? Math.abs((profileHour.actual_hours - profileHour.estimated_hours) / profileHour.estimated_hours) * 100
+          : 0;
+        if (projectVariance <= 10) {
+          accurateProjects++;
+        }
+        // Calculate margin impact (hours over * hourly rate approximation)
+        const hoursOver = profileHour.actual_hours - profileHour.estimated_hours;
+        marginImpact += hoursOver * 75; // Approximate hourly rate
+      }
+    }
+
+    const accuracyRate = totalProjectsWithProfile > 0 ? (accurateProjects / totalProjectsWithProfile) * 100 : 0;
+
+    return {
+      profile,
+      estimated: stats.estimated,
+      actual: stats.actual,
+      variance,
+      avgMistake,
+      accurateProjects,
+      totalProjectsWithProfile,
+      accuracyRate,
+      marginImpact,
+    };
+  });
+
+  return (
+    <div className="p-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-slate-900">Team Performance</h1>
+        <p className="text-sm text-slate-500 mt-1">Estimation accuracy and impact by role</p>
+      </div>
+
+      {/* Profile Cards */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        {profileDetails.map((item) => {
+          const isGood = item.accuracyRate >= 70;
+          const isWarning = item.accuracyRate >= 50 && item.accuracyRate < 70;
+
+          let borderColor = 'border-l-red-500';
+          let badgeColor = 'bg-red-100 text-red-600';
+
+          if (isGood) {
+            borderColor = 'border-l-emerald-500';
+            badgeColor = 'bg-emerald-100 text-emerald-600';
+          } else if (isWarning) {
+            borderColor = 'border-l-amber-500';
+            badgeColor = 'bg-amber-100 text-amber-600';
+          }
+
+          return (
+            <Card key={item.profile} className={`border-l-4 ${borderColor}`}>
+              <div className="flex justify-between items-start mb-4">
+                <span className="text-lg font-bold text-slate-900">{item.profile}</span>
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${badgeColor}`}>
+                  {item.accuracyRate.toFixed(0)}% accurate
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <div>
+                  <div className="text-xs text-slate-500 uppercase mb-1">Projects Within 10%</div>
+                  <div className="text-lg font-semibold">
+                    {item.accurateProjects} / {item.totalProjectsWithProfile}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-slate-500 uppercase mb-1">Avg Planning Error</div>
+                  <div className="text-lg font-semibold">
+                    {item.avgMistake.toFixed(1)}h per project
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-xs text-slate-500 uppercase mb-1">Margin Impact</div>
+                  <div className={`text-lg font-semibold ${item.marginImpact > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                    {item.marginImpact > 0 ? '-' : '+'}€{Math.abs(item.marginImpact).toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Estimated</span>
+                    <span className="font-medium">{item.estimated}h</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Actual</span>
+                    <span className="font-medium">{item.actual}h</span>
+                  </div>
+                  <div className="flex justify-between text-sm mt-2">
+                    <span className="text-slate-500">Variance</span>
+                    <Variance value={item.variance} />
+                  </div>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
 }

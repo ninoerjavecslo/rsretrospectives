@@ -7,7 +7,7 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Internal hourly cost for calculations (configurable)
-export const INTERNAL_HOURLY_COST = 50;
+export const INTERNAL_HOURLY_COST = 30;
 
 // Calculate project metrics
 export function calculateMetrics(project: ProjectWithDetails): ProjectMetrics {
@@ -35,6 +35,11 @@ export function calculateMetrics(project: ProjectWithDetails): ProjectMetrics {
   const actualMargin = totalValue > 0 ? (actualProfit / totalValue) * 100 : 0;
   const marginDelta = actualMargin - estimatedMargin;
 
+  // Effective hourly rates (what you earn per hour after external costs)
+  const netValueForHours = totalValue - estimatedExternalCost;
+  const estimatedHourlyRate = estimatedHours > 0 ? netValueForHours / estimatedHours : 0;
+  const actualHourlyRate = actualHours > 0 ? (totalValue - actualExternalCost) / actualHours : 0;
+
   // Determine health
   let health: 'on-track' | 'at-risk' | 'over-budget' = 'on-track';
   if (hoursVariancePercent > 20 || marginDelta < -10) {
@@ -58,6 +63,8 @@ export function calculateMetrics(project: ProjectWithDetails): ProjectMetrics {
     estimatedMargin,
     actualMargin,
     marginDelta,
+    estimatedHourlyRate,
+    actualHourlyRate,
     health,
   };
 }

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save, X, Plus, Trash2, FileDown } from 'lucide-react';
-import { 
+import {
   Button, Input, Textarea, Select, Checkbox, Card, CardHeader,
-  StatusBadge, HealthBadge, LoadingSpinner, Variance, StatCard
+  StatusBadge, LoadingSpinner, Variance, StatCard
 } from '../components/ui';
 import {
   fetchProjectWithDetails, updateProject, deleteProject,
@@ -12,9 +12,9 @@ import {
   createChangeRequest, updateChangeRequest, deleteChangeRequest,
   calculateMetrics, supabase
 } from '../lib/supabase';
-import type { 
+import type {
   ProjectWithDetails, ProfileHours, ScopeItem, ExternalCost, ChangeRequest,
-  Profile, ScopeItemType
+  Profile, ScopeItemType, ProjectOutcome, CostType
 } from '../types';
 
 const PROFILE_LIST: Profile[] = ['UX', 'UI', 'DEV', 'PM', 'CONTENT', 'ANALYTICS'];
@@ -24,6 +24,32 @@ const STATUS_OPTIONS = [
   { value: 'active', label: 'Active' },
   { value: 'completed', label: 'Completed' },
 ];
+const OUTCOME_OPTIONS = [
+  { value: '', label: 'Not evaluated' },
+  { value: 'success', label: 'Success' },
+  { value: 'partial_success', label: 'Partial Success' },
+  { value: 'failure', label: 'Failure' },
+  { value: 'worth_repeating', label: 'Worth Repeating' },
+  { value: 'not_worth_repeating', label: 'Not Worth Repeating' },
+];
+function OutcomeBadge({ outcome }: { outcome: ProjectOutcome | null }) {
+  if (!outcome) return null;
+
+  const styles: Record<ProjectOutcome, { bg: string; text: string; label: string }> = {
+    success: { bg: 'bg-emerald-100', text: 'text-emerald-700', label: 'Success' },
+    partial_success: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Partial Success' },
+    failure: { bg: 'bg-red-100', text: 'text-red-700', label: 'Failure' },
+    worth_repeating: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Worth Repeating' },
+    not_worth_repeating: { bg: 'bg-slate-100', text: 'text-slate-700', label: 'Not Worth Repeating' },
+  };
+
+  const style = styles[outcome];
+  return (
+    <span className={`px-2 py-1 rounded text-xs font-medium ${style.bg} ${style.text}`}>
+      {style.label}
+    </span>
+  );
+}
 
 export function ProjectDetail() {
   const { id } = useParams<{ id: string }>();
@@ -72,6 +98,7 @@ export function ProjectDetail() {
       scope_creep: data.scope_creep,
       scope_creep_notes: data.scope_creep_notes,
       status: data.status,
+      project_outcome: data.project_outcome,
     });
     
     const existingProfiles = new Set(data.profile_hours.map(ph => ph.profile));
@@ -142,6 +169,7 @@ export function ProjectDetail() {
         if (cost.id.startsWith('new-')) {
           await createExternalCost(project.id, {
             description: cost.description,
+            cost_type: cost.cost_type,
             estimated_cost: cost.estimated_cost,
             actual_cost: cost.actual_cost,
             notes: cost.notes,
@@ -149,6 +177,7 @@ export function ProjectDetail() {
         } else {
           await updateExternalCost(cost.id, {
             description: cost.description,
+            cost_type: cost.cost_type,
             estimated_cost: cost.estimated_cost,
             actual_cost: cost.actual_cost,
             notes: cost.notes,
@@ -207,11 +236,12 @@ export function ProjectDetail() {
     }]);
   }
 
-  function addExternalCost() {
+  function addExternalCost(costType: CostType) {
     setExternalCosts([...externalCosts, {
       id: `new-${Date.now()}`,
       project_id: project!.id,
       description: '',
+      cost_type: costType,
       estimated_cost: 0,
       actual_cost: 0,
       notes: '',
@@ -300,7 +330,9 @@ export function ProjectDetail() {
               <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
             )}
             <StatusBadge status={formData.status || project.status} />
-            <HealthBadge status={metrics.health} />
+            {(formData.project_outcome || project.project_outcome) && (
+              <OutcomeBadge outcome={formData.project_outcome || project.project_outcome} />
+            )}
           </div>
           <p className="text-sm text-slate-500 mt-1">
             {project.client || 'No client'} • {project.project_type || 'No type'} • {project.cms || 'No CMS'}
@@ -325,22 +357,27 @@ export function ProjectDetail() {
       </div>
 
       {/* Financial Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard 
-          label="Total Value" 
+      <div className="grid grid-cols-5 gap-4 mb-6">
+        <StatCard
+          label="Total Value"
           value={`€${metrics.totalValue.toLocaleString()}`}
           subtext={crTotal > 0 ? `€${(formData.offer_value || project.offer_value).toLocaleString()} + €${crTotal.toLocaleString()} CRs` : undefined}
         />
-        <StatCard 
-          label="Hours" 
+        <StatCard
+          label="Hours"
           value={`${metrics.actualHours}h`}
           subtext={`/ ${metrics.estimatedHours}h estimated`}
           trend={metrics.hoursVariance !== 0 ? `${metrics.hoursVariance > 0 ? '+' : ''}${metrics.hoursVariance}h (${metrics.hoursVariancePercent.toFixed(0)}%)` : undefined}
         />
-        <StatCard 
-          label="Est. Margin" 
+        <StatCard
+          label="Planned Rate"
+          value={`€${metrics.estimatedHourlyRate.toFixed(0)}/h`}
+          subtext={`at ${metrics.estimatedHours}h planned`}
+        />
+        <StatCard
+          label="Est. Margin"
           value={`${metrics.estimatedMargin.toFixed(0)}%`}
-          subtext={`€${metrics.estimatedProfit.toLocaleString()} target`}
+          subtext={`€${metrics.estimatedProfit.toLocaleString()} profit`}
         />
         <div className={`rounded-xl p-5 border ${metrics.actualMargin >= metrics.estimatedMargin ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
           <div className="text-xs text-slate-500 mb-2 font-medium uppercase tracking-wide">Actual Margin</div>
@@ -348,7 +385,7 @@ export function ProjectDetail() {
             {metrics.actualMargin.toFixed(0)}%
           </div>
           <div className={`text-xs mt-1 ${metrics.marginDelta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-            {metrics.marginDelta >= 0 ? '+' : ''}{metrics.marginDelta.toFixed(1)}% vs target
+            {metrics.actualHours > 0 ? `€${metrics.actualHourlyRate.toFixed(0)}/h actual` : `${metrics.marginDelta >= 0 ? '+' : ''}${metrics.marginDelta.toFixed(1)}% vs est`}
           </div>
         </div>
       </div>
@@ -644,6 +681,7 @@ export function ProjectDetail() {
                 <Input label="Base Offer (€)" type="number" value={formData.offer_value || 0} onChange={(v) => setFormData({ ...formData, offer_value: Number(v) })} />
                 <Input label="Est. Margin (%)" type="number" value={formData.estimated_profit_margin || 0} onChange={(v) => setFormData({ ...formData, estimated_profit_margin: Number(v) })} />
                 <Select label="Status" value={formData.status || 'draft'} onChange={(v) => setFormData({ ...formData, status: v as 'draft' | 'active' | 'completed' })} options={STATUS_OPTIONS} />
+                <Select label="Project Outcome" value={formData.project_outcome || ''} onChange={(v) => setFormData({ ...formData, project_outcome: (v || null) as ProjectOutcome | null })} options={OUTCOME_OPTIONS} />
               </div>
             ) : (
               <div className="space-y-2">
@@ -665,14 +703,14 @@ export function ProjectDetail() {
           </Card>
 
 
-          {/* External Costs */}
+          {/* Contractors */}
           <Card>
-            <CardHeader title="External Costs" action={editMode && <Button variant="ghost" size="sm" onClick={addExternalCost}><Plus className="w-3 h-3" /> Add</Button>} />
-            {externalCosts.length === 0 ? (
-              <p className="text-sm text-slate-400">No external costs</p>
+            <CardHeader title="Contractors" action={editMode && <Button variant="ghost" size="sm" onClick={() => addExternalCost('contractor')}><Plus className="w-3 h-3" /> Add</Button>} />
+            {externalCosts.filter(c => c.cost_type === 'contractor').length === 0 ? (
+              <p className="text-sm text-slate-400">No contractors</p>
             ) : (
               <div className="space-y-3">
-                {externalCosts.map((cost) => (
+                {externalCosts.filter(c => c.cost_type === 'contractor').map((cost) => (
                   <div key={cost.id} className="py-2 border-b border-slate-100 last:border-0">
                     <div className="flex justify-between items-center mb-1">
                       {editMode ? (
@@ -714,19 +752,78 @@ export function ProjectDetail() {
                     </div>
                   </div>
                 ))}
-                <div className="flex justify-between pt-2 border-t-2 border-slate-200">
-                  <span className="text-sm font-semibold">Total</span>
-                  <span className="text-sm font-semibold">
-                    <span className="text-slate-500">€{metrics.estimatedExternalCost.toLocaleString()}</span>
-                    <span className="text-slate-300 mx-1">→</span>
-                    <span className={metrics.actualExternalCost > metrics.estimatedExternalCost ? 'text-red-500' : 'text-emerald-500'}>
-                      €{metrics.actualExternalCost.toLocaleString()}
-                    </span>
-                  </span>
-                </div>
               </div>
             )}
           </Card>
+
+          {/* Tools & Licenses */}
+          <Card>
+            <CardHeader title="Tools & Licenses" action={editMode && <Button variant="ghost" size="sm" onClick={() => addExternalCost('tool_license')}><Plus className="w-3 h-3" /> Add</Button>} />
+            {externalCosts.filter(c => c.cost_type === 'tool_license').length === 0 ? (
+              <p className="text-sm text-slate-400">No tools or licenses</p>
+            ) : (
+              <div className="space-y-3">
+                {externalCosts.filter(c => c.cost_type === 'tool_license').map((cost) => (
+                  <div key={cost.id} className="py-2 border-b border-slate-100 last:border-0">
+                    <div className="flex justify-between items-center mb-1">
+                      {editMode ? (
+                        <input type="text" value={cost.description}
+                          onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, description: e.target.value } : c))}
+                          className="flex-1 px-2 py-1 border border-slate-200 rounded text-sm mr-2"
+                        />
+                      ) : (
+                        <span className="text-sm text-slate-700">{cost.description}</span>
+                      )}
+                      {editMode && (
+                        <button onClick={() => removeExternalCost(cost.id)} className="text-slate-400 hover:text-red-500">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {editMode ? (
+                        <>
+                          <input type="number" value={cost.estimated_cost}
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, estimated_cost: Number(e.target.value) } : c))}
+                            className="w-20 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                          />
+                          <span className="text-slate-300">→</span>
+                          <input type="number" value={cost.actual_cost}
+                            onChange={(e) => setExternalCosts(externalCosts.map(c => c.id === cost.id ? { ...c, actual_cost: Number(e.target.value) } : c))}
+                            className="w-20 px-2 py-1 border border-slate-200 rounded text-sm text-right"
+                          />
+                        </>
+                      ) : (
+                        <span className="text-sm">
+                          <span className="text-slate-500">€{cost.estimated_cost.toLocaleString()}</span>
+                          <span className="text-slate-300 mx-1">→</span>
+                          <span className={cost.actual_cost > cost.estimated_cost ? 'text-red-500 font-medium' : 'text-emerald-500 font-medium'}>
+                            €{cost.actual_cost.toLocaleString()}
+                          </span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {/* External Costs Total */}
+          {externalCosts.length > 0 && (
+            <Card>
+              <div className="flex justify-between">
+                <span className="text-sm font-semibold">Total External Costs</span>
+                <span className="text-sm font-semibold">
+                  <span className="text-slate-500">€{metrics.estimatedExternalCost.toLocaleString()}</span>
+                  <span className="text-slate-300 mx-1">→</span>
+                  <span className={metrics.actualExternalCost > metrics.estimatedExternalCost ? 'text-red-500' : 'text-emerald-500'}>
+                    €{metrics.actualExternalCost.toLocaleString()}
+                  </span>
+                </span>
+              </div>
+            </Card>
+          )}
 
           {/* Danger Zone */}
           {editMode && (

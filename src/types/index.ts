@@ -12,9 +12,12 @@ export interface Project {
   scope_creep: boolean;
   scope_creep_notes: string;
   status: 'draft' | 'active' | 'completed';
+  project_outcome: ProjectOutcome | null;
   created_at: string;
   updated_at: string;
 }
+
+export type ProjectOutcome = 'success' | 'partial_success' | 'failure' | 'worth_repeating' | 'not_worth_repeating';
 
 export interface ProfileHours {
   id: string;
@@ -38,10 +41,13 @@ export interface ExternalCost {
   id: string;
   project_id: string;
   description: string;
+  cost_type: CostType;
   estimated_cost: number;
   actual_cost: number;
   notes: string;
 }
+
+export type CostType = 'contractor' | 'tool_license';
 
 export interface ChangeRequest {
   id: string;
@@ -82,5 +88,7 @@ export interface ProjectMetrics {
   estimatedMargin: number;
   actualMargin: number;
   marginDelta: number;
+  estimatedHourlyRate: number;
+  actualHourlyRate: number;
   health: 'on-track' | 'at-risk' | 'over-budget';
 }
