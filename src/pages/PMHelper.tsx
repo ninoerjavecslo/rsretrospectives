@@ -222,7 +222,7 @@ export function PMHelper() {
       // Step 2: Poll for results
       const jobId = startData.job_id;
       let attempts = 0;
-      const maxAttempts = 30; // 30 seconds max
+      const maxAttempts = 60; // 60 seconds max for detailed generation
 
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
@@ -889,8 +889,9 @@ export function PMHelper() {
             {loading && (
               <Card className="p-12 text-center">
                 <LoadingSpinner />
-                <p className="text-slate-700 font-medium">Generating tasks...</p>
-                <p className="text-sm text-slate-500">AI is analyzing your offer</p>
+                <p className="text-slate-700 font-medium mt-4">Generating detailed tasks...</p>
+                <p className="text-sm text-slate-500">AI is creating 40-70 specific tasks for each page and feature</p>
+                <p className="text-xs text-slate-400 mt-2">This may take up to 60 seconds</p>
               </Card>
             )}
           </div>

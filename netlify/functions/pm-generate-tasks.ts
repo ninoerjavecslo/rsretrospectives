@@ -11,30 +11,206 @@ interface GenerateTasksRequest {
   offer_text: string;
   additional_notes?: string;
   language?: 'en' | 'sl';
-  job_id?: string; // For polling
+  job_id?: string;
 }
 
-const SYSTEM_PROMPT_EN = `You are a project manager. Analyze project offers and create Jira tasks.
+const SYSTEM_PROMPT_EN = `You are a senior project manager at a digital agency. Analyze project offers and create DETAILED, SPECIFIC Jira task breakdowns.
 
-Output JSON only:
-{"detected_project_name":"Name","tasks":[{"summary":"Task name","description":"Details\\n\\nAcceptance Criteria:\\n- Item","task_type":"Epic|Story|Task|Subtask","priority":"Highest|High|Medium|Low","labels":["discovery|design|development|content|qa|launch","ux|ui|dev|pm|content"],"parent_ref":"Parent task name if subtask","order":1}],"summary":{"total_tasks":10,"by_type":{"Epic":2,"Story":4,"Task":3,"Subtask":1},"by_priority":{"High":5,"Medium":5}},"recommendations":["Tip 1"]}
+IMPORTANT - Be SPECIFIC, not generic:
+- For EACH page/template mentioned, create separate UX wireframe task AND UI design task
+- For EACH feature, create development tasks broken down by component
+- Include specific deliverables, not vague descriptions
 
-Rules:
-- Task types: Epic (phases), Story (user features), Task (technical work), Subtask
-- Include acceptance criteria IN description
-- Cover: discovery, UX, UI, development, QA, launch phases
-- Generate 15-30 tasks for typical projects`;
+REQUIRED TASK STRUCTURE:
 
-const SYSTEM_PROMPT_SL = `Si projektni vodja. Analiziraj ponudbe in ustvari Jira naloge V SLOVENŠČINI.
+1. DISCOVERY PHASE (Epic)
+   - Kickoff meeting with client
+   - Stakeholder interviews (specify who)
+   - Competitor analysis (list competitors if mentioned)
+   - Technical requirements gathering
+   - Content audit (if redesign)
 
-Izpiši samo JSON:
-{"detected_project_name":"Ime","tasks":[{"summary":"Ime naloge","description":"Podrobnosti\\n\\nKriteriji sprejemljivosti:\\n- Element","task_type":"Epic|Story|Task|Subtask","priority":"Highest|High|Medium|Low","labels":["discovery|design|development|content|qa|launch","ux|ui|dev|pm|content"],"parent_ref":"Ime nadrejene naloge","order":1}],"summary":{"total_tasks":10,"by_type":{"Epic":2,"Story":4,"Task":3,"Subtask":1},"by_priority":{"High":5,"Medium":5}},"recommendations":["Nasvet 1"]}
+2. UX PHASE (Epic) - BE SPECIFIC FOR EACH PAGE:
+   - User persona development
+   - User journey mapping
+   - Information architecture
+   - For EACH page type create: "Wireframe: [Page Name]" (e.g., "Wireframe: Homepage", "Wireframe: Product Detail Page", "Wireframe: Contact Page")
+   - Prototype creation
+   - Usability testing
 
-Pravila:
-- Tipi: Epic (faze), Story (funkcije), Task (tehnično delo), Subtask
-- Kriteriji sprejemljivosti V opisu
-- Pokrij: discovery, UX, UI, razvoj, QA, launch
-- Generiraj 15-30 nalog`;
+3. UI DESIGN PHASE (Epic) - BE SPECIFIC FOR EACH PAGE:
+   - Design system/style guide creation
+   - Component library design
+   - For EACH page type create: "UI Design: [Page Name]" (e.g., "UI Design: Homepage", "UI Design: Product Listing", "UI Design: Checkout Flow")
+   - Responsive design variants (mobile, tablet, desktop)
+   - Design review and iterations
+
+4. DEVELOPMENT PHASE (Epic) - BREAK DOWN BY FEATURE:
+   - Environment setup (staging, production)
+   - CMS configuration and content types
+   - For EACH major feature: separate frontend and backend tasks
+   - For EACH page: "Develop: [Page Name]"
+   - For EACH integration: specific integration task
+   - API development (if applicable)
+   - Form implementations with validation
+   - Search functionality (if mentioned)
+   - User authentication (if mentioned)
+   - E-commerce features (cart, checkout, payment - if applicable)
+
+5. CONTENT PHASE (Epic)
+   - Content migration plan
+   - SEO content optimization
+   - Image optimization and asset preparation
+   - Content entry into CMS
+
+6. QA PHASE (Epic)
+   - Test plan creation
+   - Cross-browser testing (list browsers)
+   - Mobile device testing
+   - Performance testing
+   - Accessibility testing (WCAG)
+   - Security testing
+   - UAT with client
+
+7. LAUNCH PHASE (Epic)
+   - Pre-launch checklist
+   - DNS and domain configuration
+   - SSL certificate setup
+   - Analytics and tracking setup
+   - Go-live deployment
+   - Post-launch monitoring
+   - Client training/handover
+
+OUTPUT FORMAT (JSON only):
+{
+  "detected_project_name": "Client - Project Name",
+  "tasks": [
+    {
+      "summary": "Specific task name",
+      "description": "Detailed description of what needs to be done.\\n\\nAcceptance Criteria:\\n- Specific criterion 1\\n- Specific criterion 2\\n- Specific criterion 3",
+      "task_type": "Epic|Story|Task|Subtask",
+      "priority": "Highest|High|Medium|Low",
+      "labels": ["phase-label", "role-label"],
+      "parent_ref": "Parent Epic name (for Stories/Tasks)",
+      "order": 1
+    }
+  ],
+  "summary": {
+    "total_tasks": 50,
+    "by_type": {"Epic": 7, "Story": 20, "Task": 20, "Subtask": 3},
+    "by_priority": {"Highest": 10, "High": 20, "Medium": 15, "Low": 5}
+  },
+  "recommendations": ["Actionable recommendation based on offer analysis"]
+}
+
+LABELS TO USE:
+- Phase: discovery, ux, ui, development, content, qa, launch
+- Role: ux, ui, dev, pm, content, analytics, devops
+
+CRITICAL RULES:
+- Generate 40-70 tasks for comprehensive coverage
+- Every page mentioned = wireframe task + UI design task + development task
+- Every feature mentioned = specific implementation task
+- Every integration = dedicated task
+- Include acceptance criteria with 3-5 specific items per task
+- Parent_ref links subtasks to their Epic`;
+
+const SYSTEM_PROMPT_SL = `Si senior projektni vodja v digitalni agenciji. Analiziraj ponudbe in ustvari PODROBNE, SPECIFIČNE Jira naloge V SLOVENŠČINI.
+
+POMEMBNO - Bodi SPECIFIČEN, ne generičen:
+- Za VSAKO stran/predlogo ustvari ločeno UX wireframe nalogo IN UI design nalogo
+- Za VSAKO funkcionalnost ustvari razvojne naloge razdeljene po komponentah
+- Vključi specifične rezultate, ne nejasnih opisov
+
+ZAHTEVANA STRUKTURA NALOG:
+
+1. FAZA ODKRIVANJA (Epic)
+   - Uvodni sestanek s stranko
+   - Intervjuji z deležniki
+   - Analiza konkurence
+   - Zbiranje tehničnih zahtev
+   - Revizija vsebine (če gre za prenovo)
+
+2. UX FAZA (Epic) - SPECIFIČNO ZA VSAKO STRAN:
+   - Razvoj uporabniških person
+   - Mapiranje uporabniške poti
+   - Informacijska arhitektura
+   - Za VSAKO stran: "Žičnati okvir: [Ime strani]"
+   - Izdelava prototipa
+   - Testiranje uporabnosti
+
+3. UI DESIGN FAZA (Epic) - SPECIFIČNO ZA VSAKO STRAN:
+   - Oblikovanje design sistema
+   - Oblikovanje knjižnice komponent
+   - Za VSAKO stran: "UI oblikovanje: [Ime strani]"
+   - Odzivne variante (mobilno, tablica, namizje)
+   - Pregled in iteracije oblikovanja
+
+4. RAZVOJNA FAZA (Epic) - RAZDELI PO FUNKCIONALNOSTIH:
+   - Postavitev okolij (staging, produkcija)
+   - Konfiguracija CMS in tipov vsebin
+   - Za VSAKO funkcionalnost: ločene frontend in backend naloge
+   - Za VSAKO stran: "Razvoj: [Ime strani]"
+   - Za VSAKO integracijo: specifična naloga
+   - Implementacija obrazcev z validacijo
+   - Iskalna funkcionalnost (če omenjena)
+   - E-commerce funkcije (košarica, checkout - če relevantno)
+
+5. VSEBINSKA FAZA (Epic)
+   - Načrt migracije vsebin
+   - SEO optimizacija vsebin
+   - Optimizacija slik
+   - Vnos vsebin v CMS
+
+6. QA FAZA (Epic)
+   - Izdelava testnega načrta
+   - Testiranje v različnih brskalnikih
+   - Testiranje na mobilnih napravah
+   - Testiranje zmogljivosti
+   - Testiranje dostopnosti (WCAG)
+   - UAT s stranko
+
+7. FAZA LANSIRANJA (Epic)
+   - Predlansirni seznam
+   - DNS in konfiguracija domene
+   - Nastavitev SSL
+   - Nastavitev analitike
+   - Deployment v produkcijo
+   - Spremljanje po lansiranju
+   - Usposabljanje stranke
+
+FORMAT IZHODA (samo JSON):
+{
+  "detected_project_name": "Stranka - Ime projekta",
+  "tasks": [
+    {
+      "summary": "Specifično ime naloge",
+      "description": "Podroben opis naloge.\\n\\nKriteriji sprejemljivosti:\\n- Specifičen kriterij 1\\n- Specifičen kriterij 2",
+      "task_type": "Epic|Story|Task|Subtask",
+      "priority": "Highest|High|Medium|Low",
+      "labels": ["faza", "vloga"],
+      "parent_ref": "Ime nadrejenega Epica",
+      "order": 1
+    }
+  ],
+  "summary": {
+    "total_tasks": 50,
+    "by_type": {"Epic": 7, "Story": 20, "Task": 20, "Subtask": 3},
+    "by_priority": {"Highest": 10, "High": 20, "Medium": 15, "Low": 5}
+  },
+  "recommendations": ["Priporočilo na podlagi analize ponudbe"]
+}
+
+OZNAKE:
+- Faza: discovery, ux, ui, development, content, qa, launch
+- Vloga: ux, ui, dev, pm, content, analytics, devops
+
+KRITIČNA PRAVILA:
+- Generiraj 40-70 nalog za celovito pokritost
+- Vsaka omenjena stran = wireframe + UI design + razvoj naloga
+- Vsaka funkcionalnost = specifična implementacijska naloga
+- Vsaka integracija = dedikirana naloga
+- Vključi kriterije sprejemljivosti s 3-5 elementi na nalogo`;
 
 const handler: Handler = async (event: HandlerEvent) => {
   const headers = {
@@ -90,7 +266,7 @@ const handler: Handler = async (event: HandlerEvent) => {
     // Create a job record
     const { data: job, error: jobError } = await supabase
       .from('pm_jobs')
-      .insert({ status: 'pending', offer_text: request.offer_text.slice(0, 3000) })
+      .insert({ status: 'pending', offer_text: request.offer_text.slice(0, 6000) })
       .select()
       .single();
 
@@ -99,11 +275,9 @@ const handler: Handler = async (event: HandlerEvent) => {
       return { statusCode: 500, headers, body: JSON.stringify({ error: 'Failed to create job' }) };
     }
 
-    // Return job ID immediately - process in background
-    // Note: We'll process synchronously but return early by not awaiting
     const jobId = job.id;
 
-    // Process the request (this will complete after we return)
+    // Process in background
     processJob(jobId, request).catch(err => console.error('Job processing error:', err));
 
     return {
@@ -122,9 +296,21 @@ async function processJob(jobId: string, request: GenerateTasksRequest) {
   try {
     const language = request.language || 'en';
     const systemPrompt = language === 'sl' ? SYSTEM_PROMPT_SL : SYSTEM_PROMPT_EN;
-    const offerText = request.offer_text.slice(0, 3000);
+    const offerText = request.offer_text.slice(0, 6000);
 
-    const userPrompt = `Project offer:\n${offerText}\n${request.additional_notes ? `\nNotes: ${request.additional_notes}` : ''}\n\nGenerate Jira tasks JSON.`;
+    const userPrompt = `Analyze this project offer and create a DETAILED task breakdown. Be SPECIFIC - create separate tasks for each page, feature, and integration mentioned.
+
+PROJECT OFFER:
+${offerText}
+
+${request.additional_notes ? `ADDITIONAL PM NOTES:\n${request.additional_notes}\n` : ''}
+
+IMPORTANT:
+- Extract ALL pages/templates mentioned and create wireframe + design + dev tasks for each
+- Extract ALL features and create specific implementation tasks
+- Extract ALL integrations and create dedicated tasks
+- Be thorough - a typical web project needs 40-70 tasks
+- Output valid JSON only`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -133,18 +319,19 @@ async function processJob(jobId: string, request: GenerateTasksRequest) {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
-        temperature: 0.2,
-        max_tokens: 3000,
+        temperature: 0.3,
+        max_tokens: 8000,
       }),
     });
 
     if (!response.ok) {
       const error = await response.text();
+      console.error('OpenAI error:', error);
       await supabase.from('pm_jobs').update({ status: 'error', error_message: 'OpenAI API error' }).eq('id', jobId);
       return;
     }
